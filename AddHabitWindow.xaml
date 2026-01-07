@@ -4,7 +4,7 @@
         xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         Title="Nouvelle Habitude" Height="700" Width="550"
         Background="#0A0A0A" WindowStyle="None" AllowsTransparency="True"
-        WindowStartupLocation="CenterOwner" BorderThickness="1" BorderBrush="Cyan">
+        WindowStartupLocation="CenterOwner" BorderThickness="1" BorderBrush="Cyan" Icon="logo.ico">
 
     <Window.Resources>
         <Style x:Key="SectionLabel" TargetType="TextBlock">
