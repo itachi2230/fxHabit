@@ -14,8 +14,8 @@
             private DateTime _currentWeekDate = DateTime.Today;
             private SeriesCollection _chartSeries;
             private List<string> _labels;
-            // Séparation des listes pour le design
-            public IEnumerable<Habit> PendingHabits => HabitList.Where(h => !IsCompletedToday(h));
+        // Séparation des listes pour le design
+        public IEnumerable<Habit> PendingHabits => HabitList.Where(h => !IsCompletedToday(h));
             public IEnumerable<Habit> CompletedHabits => HabitList.Where(h => IsCompletedToday(h));
 
             public ObservableCollection<Habit> HabitList
@@ -79,42 +79,60 @@
             }
 
              public IEnumerable<Habit> HabitsToday => HabitList.Where(h => h.TargetDays.Contains((int)(DateTime.Now.DayOfWeek == 0 ? 7 : (int)DateTime.Now.DayOfWeek)));
-        
-            private void UpdateChart()
+
+        private Guid? _focusedHabitId = null; // Variable pour garder en mémoire le filtre actuel
+
+        public void UpdateChart(Guid? filterHabitId = null)
+        {
+            // On met à jour l'ID filtré. 
+            // Si on clique sur une carte déjà filtrée, on pourrait aussi imaginer reset (optionnel)
+            _focusedHabitId = filterHabitId;
+
+            DateTime startOfWeek = _currentWeekDate.AddDays(-(int)(_currentWeekDate.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)_currentWeekDate.DayOfWeek - 1)).Date;
+            var weeklyLogs = HabitStorage.LoadWeeklyLogs(startOfWeek);
+
+            var newSeries = new SeriesCollection();
+
+            // FILTRAGE : Si _focusedHabitId a une valeur, on ne prend que cette habitude.
+            // Sinon, on prend toute la liste HabitList.
+            var habitsToShow = _focusedHabitId.HasValue
+                ? HabitList.Where(h => h.Id == _focusedHabitId.Value)
+                : HabitList;
+
+            foreach (var habit in habitsToShow)
             {
-                DateTime startOfWeek = _currentWeekDate.AddDays(-(int)(_currentWeekDate.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)_currentWeekDate.DayOfWeek - 1)).Date;
-                var weeklyLogs = HabitStorage.LoadWeeklyLogs(startOfWeek);
-
-                var newSeries = new SeriesCollection();
-
-                foreach (var habit in HabitList)
+                var values = new ChartValues<double>();
+                for (int i = 0; i < 7; i++)
                 {
-                    var values = new ChartValues<double>();
-                    for (int i = 0; i < 7; i++)
-                    {
-                        DateTime targetDate = startOfWeek.AddDays(i);
-                        var log = weeklyLogs.FirstOrDefault(l => l.HabitId == habit.Id && l.Date.Date == targetDate.Date);
-                        // On calcule le % de complétion pour cette habitude précise
-                        values.Add(log != null ? Math.Min(100, (log.ProgressValue / habit.DailyGoal) * 100) : 0);
-                    }
+                    DateTime targetDate = startOfWeek.AddDays(i);
+                    var log = weeklyLogs.FirstOrDefault(l => l.HabitId == habit.Id && l.Date.Date == targetDate.Date);
 
-                    newSeries.Add(new LineSeries
+                    // Calcul du % basé sur DailyGoal
+                    double progress = 0;
+                    if (log != null && habit.DailyGoal > 0)
                     {
-                        Title = habit.Title,
-                        Values = values,
-                        Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(habit.ColorHex)),
-                        PointForeground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(habit.ColorHex)),
-                        Fill = Brushes.Transparent,
-                        PointGeometrySize = 10,
-                        // Utilise une forme différente par habitude si tu veux (Optionnel)
-                        PointGeometry = DefaultGeometries.Circle,
-                        LineSmoothness = 0.5
-                    });
+                        progress = Math.Min(100, (log.ProgressValue / habit.DailyGoal) * 100);
+                    }
+                    values.Add(progress);
                 }
-                ChartSeries = newSeries;
+
+                newSeries.Add(new LineSeries
+                {
+                    Title = habit.Title,
+                    Values = values,
+                    Stroke = new SolidColorBrush((Color)ColorConverter.ConvertFromString(habit.ColorHex)),
+                    PointForeground = new SolidColorBrush((Color)ColorConverter.ConvertFromString(habit.ColorHex)),
+                    Fill = Brushes.Transparent,
+                    PointGeometrySize = 10,
+                    PointGeometry = DefaultGeometries.Circle,
+                    LineSmoothness = 0.5
+                });
             }
-            // Vérifie si l'objectif est atteint pour aujourd'hui
-            public void AddProgress(Habit habit, double amount)
+
+            ChartSeries = newSeries;
+        }
+        // Vérifie si l'objectif est atteint pour aujourd'hui
+        public void AddProgress(Habit habit, double amount)
             {
                 // 1. On modifie la propriété (ce qui déclenche le OnPropertyChanged de IsCompleted)
                 habit.CurrentValue += amount;

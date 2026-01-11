@@ -124,33 +124,89 @@ namespace FxHabit
 
 
         //actions de fenetre
+        // Pour les paramètres
+        private void BtnSettings_Click(object sender, RoutedEventArgs e)
+        {
+            DashboardView.Visibility = Visibility.Collapsed;
+            DetailViewControl.Visibility = Visibility.Collapsed;
+            SettingsViewControl.Visibility = Visibility.Visible;
+
+            // Style visuel du bouton
+            BtnSettings.Foreground = Brushes.Cyan;
+            BtnDashboard.Foreground = Brushes.Gray;
+        }
+
+        // Pour revenir au Dashboard
+        private void NavDashboard_Click(object sender, RoutedEventArgs e)
+        {
+            SettingsViewControl.Visibility = Visibility.Collapsed;
+            DetailViewControl.Visibility = Visibility.Collapsed;
+            DashboardView.Visibility = Visibility.Visible;
+
+            BtnDashboard.Foreground = Brushes.Cyan;
+            BtnSettings.Foreground = Brushes.Gray;
+        }
+
+        // Pour le détail (clic sur une carte)
         private void HabitCard_MouseDown(object sender, MouseButtonEventArgs e)
         {
-            if (e.ChangedButton == MouseButton.Left && e.ClickCount == 2)
+            if (sender is Border cardBorder && cardBorder.DataContext is Habit selectedHabit)
             {
-                if (sender is Border cardBorder && cardBorder.DataContext is Habit selectedHabit)
+                // --- CAS 1 : DOUBLE CLIC (Ouverture de l'onglet détail) ---
+                if (e.ClickCount == 2)
                 {
-                    // 1. Charger les données
-                    DetailView.LoadHabit(selectedHabit);
+                    // 1. Charger les données dans la vue
+                    DetailViewControl.LoadHabit(selectedHabit);
 
-                    // 2. Rendre visible SANS animation d'abord pour tester
-                    OverlayContainer.Opacity = 1;
-                    OverlayContainer.Visibility = Visibility.Visible;
+                    // 2. Logique d'onglets : On cache le Dashboard, on montre le Détail
+                    DashboardView.Visibility = Visibility.Collapsed;
+                    SettingsViewControl.Visibility = Visibility.Collapsed;
+                    DetailViewControl.Visibility = Visibility.Visible;
 
-                    // 3. Optionnel : Animation de "Pop Up" légère
+                    // 3. Tes animations (on les garde, elles s'appliqueront à la vue pleine page)
                     DoubleAnimation slideIn = new DoubleAnimation
                     {
                         From = 0.9,
                         To = 1.0,
-                        Duration = TimeSpan.FromSeconds(0.2)
+                        Duration = TimeSpan.FromSeconds(0.2),
+                        EasingFunction = new QuadraticEase { EasingMode = EasingMode.EaseOut }
                     };
+
                     ScaleTransform scale = new ScaleTransform();
-                    DetailView.RenderTransform = scale;
-                    DetailView.RenderTransformOrigin = new Point(0.5, 0.5);
+                    DetailViewControl.RenderTransform = scale;
+                    DetailViewControl.RenderTransformOrigin = new Point(0.5, 0.5);
                     scale.BeginAnimation(ScaleTransform.ScaleXProperty, slideIn);
                     scale.BeginAnimation(ScaleTransform.ScaleYProperty, slideIn);
                 }
+                // --- CAS 2 : CLIC SIMPLE (Focus sur le graphique du Dashboard) ---
+                else if (e.ClickCount == 1)
+                {
+                    // On s'assure que si on était sur un autre onglet, on revient au dashboard
+                    if (DashboardView.Visibility != Visibility.Visible)
+                    {
+                        SwitchToDashboard(); // Une petite méthode helper pour nettoyer l'affichage
+                    }
+
+                    // Ton code de filtrage original
+                    vm.UpdateChart(selectedHabit.Id);
+                }
             }
+        }
+
+        // Helper pour revenir au dashboard proprement
+        private void SwitchToDashboard()
+        {
+            DetailViewControl.Visibility = Visibility.Collapsed;
+            SettingsViewControl.Visibility = Visibility.Collapsed;
+            DashboardView.Visibility = Visibility.Visible;
+
+            // Reset des couleurs de boutons sidebar
+            BtnDashboard.Foreground = Brushes.Cyan;
+            BtnSettings.Foreground = Brushes.Gray;
+        }
+        private void ResetChart_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            vm.UpdateChart(null); // Réaffiche toutes les habitudes
         }
         private void Overlay_OutsideClick(object sender, MouseButtonEventArgs e)
         {

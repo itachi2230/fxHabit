@@ -24,6 +24,7 @@
             </Style.Triggers>
         </Style>
     </Window.Resources>
+
     <Grid Background="#050505">
         <Grid.RowDefinitions>
             <RowDefinition Height="30"/>
@@ -33,14 +34,13 @@
         <Border Grid.Row="0" Background="#0A0A0A" BorderBrush="#1A1A1A" BorderThickness="0,0,0,1" 
             MouseDown="Window_MouseDown" Cursor="SizeAll">
             <Grid>
-
                 <StackPanel Orientation="Horizontal" Margin="15,0">
                     <materialDesign:PackIcon Kind="ChartBubble" Foreground="Cyan" VerticalAlignment="Center" Margin="0,0,10,0"/>
                     <TextBlock Foreground="Gray" VerticalAlignment="Center" FontSize="10" FontWeight="Bold" ><Run Text="FX"/><Run Text="-HABIT | CONTROL CENTER"/></TextBlock>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
-                    <Button Click="MinimizeApp_Click" Style="{StaticResource  CyberButton}" Foreground="Gray" Width="30" Height="Auto">
+                    <Button Click="MinimizeApp_Click" Style="{StaticResource CyberButton}" Foreground="Gray" Width="30" Height="Auto">
                         <materialDesign:PackIcon Kind="WindowMinimize" />
                     </Button>
                     <Button Click="MaximizeApp_Click" Margin="4,0" Style="{StaticResource CyberButton}" Foreground="Gray" Width="30" Height="Auto">
@@ -57,188 +57,173 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="220"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="300"/>
             </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="#0A0A0A" BorderBrush="#1A1A1A" BorderThickness="0,0,1,0">
                 <StackPanel Margin="15">
-                    <TextBlock Foreground="Cyan" FontSize="20" FontWeight="ExtraBold" Margin="0,10,0,40">
+                    <TextBlock Foreground="Cyan" FontSize="23" FontWeight="ExtraBold" Margin="0,10,0,40">
                         <TextBlock.Effect>
                             <DropShadowEffect Color="Cyan" BlurRadius="15" ShadowDepth="0"/>
                         </TextBlock.Effect><Run Text="FX"/><Run Text="-HABIT"/></TextBlock>
-                    <Button Style="{StaticResource CyberButton}" Content="DASHBOARD" Margin="0,5"/>
+                    <Button x:Name="BtnDashboard" Style="{StaticResource CyberButton}" Content="DASHBOARD" Margin="0,5" Click="NavDashboard_Click"/>
                     <Button Style="{StaticResource CyberButton}" Content="STATISTIQUES" Margin="0,5" BorderBrush="#333" Foreground="Gray"/>
-                    <Button Style="{StaticResource CyberButton}" Content="PARAMÈTRES" Margin="0,5" BorderBrush="#333" Foreground="Gray"/>
+                    <Button x:Name="BtnSettings" Style="{StaticResource CyberButton}" Content="PARAMÈTRES" Margin="0,5" BorderBrush="#333" Foreground="Gray" Click="BtnSettings_Click"/>
                     <Button Style="{StaticResource CyberButton}" Content="+ NOUVEAU" VerticalAlignment="Bottom" Margin="0,50,0,0" Background="#1100f2ff" Click="BtnAddHabit_Click"/>
                 </StackPanel>
             </Border>
 
-            <Grid Grid.Column="1" Margin="25">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="280"/>
-                    <RowDefinition Height="*"/>
-                </Grid.RowDefinitions>
-                <StackPanel Orientation="Horizontal" Grid.Row="0">
-                    <TextBlock Text="Performance " Foreground="White" FontSize="24" FontWeight="Light"/>
-                    <TextBlock Text="{Binding WeekRangeDisplay}" Foreground="Cyan" FontSize="14" VerticalAlignment="Bottom" Margin="10,0,0,5" FontWeight="Bold"/>
+            <Grid Grid.Column="1">
 
-                    <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
-                        <Button Click="PrevWeek_Click" Style="{StaticResource CyberButton}" Content="‹" Width="25" Height="25" Padding="0"/>
-                        <Button Click="NextWeek_Click" Style="{StaticResource CyberButton}" Content="›" Width="25" Height="25" Padding="0" Margin="5,0"/>
-                    </StackPanel>
-                </StackPanel>
+                <Grid x:Name="DashboardView" Visibility="Visible">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="300"/>
+                    </Grid.ColumnDefinitions>
 
-                <Border Grid.Row="1" Background="#0F0F0F" CornerRadius="10" Margin="0,20" BorderBrush="#1A1A1A" BorderThickness="1">
-                    <lvc:CartesianChart Series="{Binding ChartSeries}" Hoverable="True" Margin="10">
-                        <lvc:CartesianChart.AxisX>
-                            <lvc:Axis Labels="{Binding Labels}" Foreground="#666">
-                                <lvc:Axis.Separator>
-                                    <lvc:Separator StrokeThickness="0"/>
-                                </lvc:Axis.Separator>
-                            </lvc:Axis>
-                        </lvc:CartesianChart.AxisX>
-                        <lvc:CartesianChart.AxisY>
-                            <lvc:Axis MinValue="0" MaxValue="100" LabelFormatter="{Binding Formatter}" Foreground="#333"/>
-                        </lvc:CartesianChart.AxisY>
-                    </lvc:CartesianChart>
-                </Border>
-                <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden">
-                    <StackPanel Margin="0,0,0,20">
-
-                        <TextBlock Text="À RÉALISER" Foreground="#444" FontSize="10" FontWeight="Bold" Margin="10,0,0,10" />
-
-                        <ItemsControl ItemsSource="{Binding PendingHabits}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Width="180" Height="100" MouseDown="HabitCard_MouseDown" Cursor="Hand" Margin="4" CornerRadius="12" BorderThickness="1" BorderBrush="#222" Background="#0A0A0A">
-                                        <Grid Margin="10">
-                                            <materialDesign:PackIcon Kind="{Binding IconKey}" Foreground="{Binding ColorHex}" 
-                             Opacity="0.3" HorizontalAlignment="Right" VerticalAlignment="Top" Width="18" Height="18"/>
-
-                                            <StackPanel VerticalAlignment="Top" Margin="0,0,25,0">
-                                                <TextBlock Text="{Binding Title}" Foreground="White" FontSize="13" FontWeight="Bold" 
-                   TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
-
-                                                <StackPanel Orientation="Horizontal">
-                                                    <TextBlock Text="{Binding DailyGoal}" Foreground="Gray" FontSize="10" FontWeight="Medium"/>
-                                                    <TextBlock Text="{Binding Unit}" Foreground="Gray" FontSize="10" Margin="4,0,0,0"/>
-                                                </StackPanel>
-                                            </StackPanel>
-
-                                            <Grid VerticalAlignment="Bottom">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="Auto"/>
-                                                    <ColumnDefinition Width="*"/>
-                                                </Grid.ColumnDefinitions>
-
-                                                <Button Grid.Column="0" Content="+ 1" Click="AddProgress_Click" Style="{StaticResource CyberButton}" 
-                Height="26" Padding="12,0" FontSize="10" FontWeight="Bold" BorderBrush="{Binding ColorHex}"/>
-
-                                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                                                    <TextBlock Text="{Binding CurrentValue}" Foreground="Cyan" FontSize="12" FontWeight="Bold">
-                                                        <TextBlock.Effect>
-                                                            <DropShadowEffect Color="Cyan" BlurRadius="5" ShadowDepth="0"/>
-                                                        </TextBlock.Effect>
-                                                    </TextBlock>
-                                                    <TextBlock Text="{Binding DailyGoal, StringFormat='/ {0}'}" Foreground="#444" FontSize="11" Margin="3,0,0,0"/>
-                                                    <TextBlock Text="{Binding Unit}" Foreground="#333" FontSize="9" Margin="5,2,0,0" VerticalAlignment="Center"/>
-                                                </StackPanel>
-                                            </Grid>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <Grid Margin="0,25">
-                            <Separator Background="#1A1A1A"/>
-                            <Border Background="#050505" HorizontalAlignment="Center" Padding="10,0">
-                                <TextBlock Text="COMPLÉTÉES" Foreground="#222" FontSize="9" FontWeight="Bold"/>
-                            </Border>
-                        </Grid>
-
-                        <ItemsControl ItemsSource="{Binding CompletedHabits}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel />
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Width="180" Height="50" MouseDown="HabitCard_MouseDown" Cursor="Hand"  Margin="4" CornerRadius="10" Background="#0F1F1F" BorderBrush="Cyan" BorderThickness="0.5">
-                                        <Grid Margin="10,0">
-                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                                <materialDesign:PackIcon Kind="Check" Foreground="Cyan" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                                <TextBlock Text="{Binding Title}" Foreground="#AAA" VerticalAlignment="Center" FontSize="11" />
-                                            </StackPanel>
-
-                                            <Button Click="ResetProgress_Click" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Foreground="#333">
-                                                <materialDesign:PackIcon Kind="Undo" Width="14"/>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </Grid>
-
-            <Border Grid.Column="2" Background="#080808" Padding="20" BorderBrush="#1A1A1A" BorderThickness="1,0,0,0">
-                <StackPanel>
-                    <TextBlock Text="RECAP ANNUEL" Foreground="Gray" FontSize="10" Margin="0,0,0,15"/>
-                    <ItemsControl ItemsSource="{Binding YearlyActivity}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <UniformGrid Columns="7" Rows="5"/>
-                            </ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Rectangle Width="15" Height="15" Margin="2" RadiusX="3" RadiusY="3" Fill="Cyan" Opacity="{Binding Intensity}">
-                                    <Rectangle.ToolTip>
-                                        <ToolTip Content="{Binding Date, StringFormat=d}"/>
-                                    </Rectangle.ToolTip>
-                                </Rectangle>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <Border Background="#111" Height="1" Margin="0,30"/>
-                    <TextBlock Text="FOCUS DU JOUR" Foreground="Gray" FontSize="10" Margin="0,20,0,10"/>
-                    <TextBlock Text="Apprendre le C#" Foreground="White" FontSize="18"/>
-                    <ProgressBar Value="75" Height="3" Foreground="Cyan" Background="#050505" Margin="0,10" BorderThickness="0"/>
-                    <Button Style="{StaticResource CyberButton}" 
-                    Click="OpenData_Click" 
-                    Margin="0,5" 
-                    BorderBrush="#333" 
-                    Foreground="Gray">      
-                        <StackPanel Orientation="Horizontal">
-                            <materialDesign:PackIcon Kind="FolderOpen" Margin="0,0,10,0"/>
-                            <TextBlock Text="OUVRIR DATA"/>
+                    <Grid Grid.Column="0" Margin="25">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="280"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <StackPanel Orientation="Horizontal" Grid.Row="0">
+                            <TextBlock Text="Performance " MouseDown="ResetChart_MouseDown" Foreground="White" FontSize="24" FontWeight="Light"/>
+                            <TextBlock Text="{Binding WeekRangeDisplay}" Foreground="Cyan" FontSize="14" VerticalAlignment="Bottom" Margin="10,0,0,5" FontWeight="Bold"/>
+                            <StackPanel Orientation="Horizontal" Margin="20,0,0,0" VerticalAlignment="Center">
+                                <Button Click="PrevWeek_Click" Style="{StaticResource CyberButton}" Content="‹" Width="25" Height="25" Padding="0"/>
+                                <Button Click="NextWeek_Click" Style="{StaticResource CyberButton}" Content="›" Width="25" Height="25" Padding="0" Margin="5,0"/>
+                            </StackPanel>
                         </StackPanel>
-                    </Button>
-                </StackPanel>
-            </Border>
-        </Grid>
-        <Grid x:Name="OverlayContainer" 
-      Visibility="Collapsed" Height="700" Width="1100"
-      Background="#E6050505"
-      Grid.RowSpan="10" Grid.ColumnSpan="10">
-            <Border Background="Transparent" MouseDown="Overlay_OutsideClick"/>
 
-            <local:HabitDetailView x:Name="DetailView" 
-                           VerticalAlignment="Center" 
-                           HorizontalAlignment="Center"
-                           >
-                <local:HabitDetailView.Effect>
-                    <DropShadowEffect Color="Cyan" BlurRadius="40" ShadowDepth="0" Opacity="0.4"/>
-                </local:HabitDetailView.Effect>
-            </local:HabitDetailView>
+                        <Border Grid.Row="1" Background="#0F0F0F" CornerRadius="10" Margin="0,20" BorderBrush="#1A1A1A" BorderThickness="1">
+                            <lvc:CartesianChart Series="{Binding ChartSeries}" Hoverable="True" Margin="10">
+                                <lvc:CartesianChart.AxisX>
+                                    <lvc:Axis Labels="{Binding Labels}" Foreground="#666">
+                                        <lvc:Axis.Separator>
+                                            <lvc:Separator StrokeThickness="0"/>
+                                        </lvc:Axis.Separator>
+                                    </lvc:Axis>
+                                </lvc:CartesianChart.AxisX>
+                                <lvc:CartesianChart.AxisY>
+                                    <lvc:Axis MinValue="0" MaxValue="100" LabelFormatter="{Binding Formatter}" Foreground="#333"/>
+                                </lvc:CartesianChart.AxisY>
+                            </lvc:CartesianChart>
+                        </Border>
+
+                        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Hidden">
+                            <StackPanel Margin="0,0,0,20">
+                                <TextBlock Text="À RÉALISER" Foreground="#444" FontSize="10" FontWeight="Bold" Margin="10,0,0,10" />
+                                <ItemsControl ItemsSource="{Binding PendingHabits}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="180" Height="100" MouseDown="HabitCard_MouseDown" Cursor="Hand" Margin="4" CornerRadius="12" BorderThickness="1" BorderBrush="#222" Background="#0A0A0A">
+                                                <Grid Margin="10">
+                                                    <materialDesign:PackIcon Kind="{Binding IconKey}" Foreground="{Binding ColorHex}" Opacity="0.3" HorizontalAlignment="Right" VerticalAlignment="Top" Width="18" Height="18"/>
+                                                    <StackPanel VerticalAlignment="Top" Margin="0,0,25,0">
+                                                        <TextBlock Text="{Binding Title}" Foreground="White" FontSize="13" FontWeight="Bold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"/>
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <TextBlock Text="{Binding DailyGoal}" Foreground="Gray" FontSize="10"/>
+                                                            <TextBlock Text="{Binding Unit}" Foreground="Gray" FontSize="10" Margin="4,0,0,0"/>
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <Grid VerticalAlignment="Bottom">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto"/>
+                                                            <ColumnDefinition Width="*"/>
+                                                        </Grid.ColumnDefinitions>
+                                                        <Button Grid.Column="0" Content="+ 1" Click="AddProgress_Click" Style="{StaticResource CyberButton}" Height="26" Padding="12,0" FontSize="10" FontWeight="Bold" BorderBrush="{Binding ColorHex}"/>
+                                                        <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                            <TextBlock Text="{Binding CurrentValue}" Foreground="Cyan" FontSize="12" FontWeight="Bold">
+                                                                <TextBlock.Effect>
+                                                                    <DropShadowEffect Color="Cyan" BlurRadius="5" ShadowDepth="0"/>
+                                                                </TextBlock.Effect></TextBlock>
+                                                            <TextBlock Text="{Binding DailyGoal, StringFormat='/ {0}'}" Foreground="#444" FontSize="11" Margin="3,0,0,0"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+
+                                <Grid Margin="0,25">
+                                    <Separator Background="#1A1A1A"/>
+                                    <Border Background="#050505" HorizontalAlignment="Center" Padding="10,0">
+                                        <TextBlock Text="COMPLÉTÉES" Foreground="#222" FontSize="9" FontWeight="Bold"/>
+                                    </Border>
+                                </Grid>
+
+                                <ItemsControl ItemsSource="{Binding CompletedHabits}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel />
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Width="180" Height="50" MouseDown="HabitCard_MouseDown" Cursor="Hand" Margin="4" CornerRadius="10" Background="#0F1F1F" BorderBrush="Cyan" BorderThickness="0.5">
+                                                <Grid Margin="10,0">
+                                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                        <materialDesign:PackIcon Kind="Check" Foreground="Cyan" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                                        <TextBlock Text="{Binding Title}" Foreground="#AAA" VerticalAlignment="Center" FontSize="11" />
+                                                    </StackPanel>
+                                                    <Button Click="ResetProgress_Click" HorizontalAlignment="Right" Background="Transparent" BorderThickness="0" Foreground="#333">
+                                                        <materialDesign:PackIcon Kind="Undo" Width="14"/>
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+
+                    <Border Grid.Column="1" Background="#080808" Padding="20" BorderBrush="#1A1A1A" BorderThickness="1,0,0,0">
+                        <StackPanel>
+                            <TextBlock Text="RECAP ANNUEL" Foreground="Gray" FontSize="10" Margin="0,0,0,15"/>
+                            <ItemsControl ItemsSource="{Binding YearlyActivity}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <UniformGrid Columns="7" Rows="5"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Rectangle Width="15" Height="15" Margin="2" RadiusX="3" RadiusY="3" Fill="Cyan" Opacity="{Binding Intensity}">
+                                            <Rectangle.ToolTip>
+                                                <ToolTip Content="{Binding Date, StringFormat=d}"/>
+                                            </Rectangle.ToolTip>
+                                        </Rectangle>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Background="#111" Height="1" Margin="0,30"/>
+                            <TextBlock Text="FOCUS DU JOUR" Foreground="Gray" FontSize="10" Margin="0,20,0,10"/>
+                            <TextBlock Text="Apprendre le C#" Foreground="White" FontSize="18"/>
+                            <ProgressBar Value="75" Height="3" Foreground="Cyan" Background="#050505" Margin="0,10" BorderThickness="0"/>
+                            <Button Style="{StaticResource CyberButton}" Click="OpenData_Click" Margin="0,5" BorderBrush="#333" Foreground="Gray">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="FolderOpen" Margin="0,0,10,0"/>
+                                    <TextBlock Text="OUVRIR DATA"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <local:SettingsView x:Name="SettingsViewControl" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#050505"/>
+
+                <local:HabitDetailView x:Name="DetailViewControl" Visibility="Collapsed" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="#050505"/>
+            </Grid>
+        </Grid>
+
+        <Grid x:Name="OverlayContainer" Visibility="Collapsed" Background="#E6050505" Grid.RowSpan="2">
         </Grid>
     </Grid>
 </Window>

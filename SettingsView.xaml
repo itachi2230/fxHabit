@@ -1,0 +1,195 @@
+﻿<UserControl x:Class="FxHabit.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             HorizontalAlignment="Stretch" 
+             VerticalAlignment="Stretch">
+
+    <UserControl.Resources>
+        <Style x:Key="CircularProfileImage" TargetType="Ellipse">
+            <Setter Property="Width" Value="120"/>
+            <Setter Property="Height" Value="120"/>
+            <Setter Property="Stroke" Value="Cyan"/>
+            <Setter Property="StrokeThickness" Value="2"/>
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect Color="Cyan" BlurRadius="20" ShadowDepth="0" Opacity="0.5"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Border Background="#050505" BorderBrush="#1A1A1A" BorderThickness="0">
+        <Grid Margin="40">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="0,0,40,0">
+                <TextBlock Text="PARAMÈTRES" Foreground="Cyan" FontSize="18" FontWeight="ExtraBold" Margin="0,0,0,50">
+                    <TextBlock.Effect>
+                        <DropShadowEffect Color="Cyan" BlurRadius="15" ShadowDepth="0"/>
+                    </TextBlock.Effect>
+                </TextBlock>
+
+                <Button x:Name="BtnAppTab" Content="APPLICATION" Style="{StaticResource CyberButton}" Click="BtnAppTab_Click"
+                        Height="30" Margin="0,8" HorizontalAlignment="Stretch" FontSize="14"/>
+
+                <Button x:Name="BtnAccountTab" Content="COMPTE GLOBAL" Style="{StaticResource CyberButton}" Click="BtnAccountTab_Click" 
+                        Height="30" Margin="0,8" Foreground="Gray" BorderBrush="#222" HorizontalAlignment="Stretch" FontSize="14"/>
+
+                
+
+                
+            </StackPanel>
+
+            <Border Grid.Column="1" Background="#0A0A0A" CornerRadius="20" Padding="60,40" BorderBrush="#1A1A1A" BorderThickness="1">
+                <Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Hidden" PanningMode="Both">
+                        <Grid x:Name="AccountGrid" MaxWidth="800" HorizontalAlignment="Stretch" VerticalAlignment="Center">
+
+                            <StackPanel x:Name="PanelApp" Visibility="Visible">
+                                <TextBlock Text="CONFIGURATION SYSTÈME" Foreground="White" FontSize="24" Margin="0,0,0,10" FontWeight="Bold"/>
+                                <TextBlock Text="Personnalisez votre expérience locale FxHabit." Foreground="Gray" FontSize="12" Margin="0,0,0,40"/>
+                                <CheckBox Content="Lancer au démarrage de Windows" Foreground="White" Margin="0,10"/>
+                                <CheckBox Content="Activer les alertes sonores" IsChecked="True" Foreground="White" Margin="0,10"/>
+                                <TextBlock Text="Langue de l'interface" Foreground="Gray" Margin="0,20,0,10" FontSize="11" FontWeight="Bold"/>
+                                <ComboBox Background="#111" Foreground="White" BorderBrush="#333" Height="40" VerticalContentAlignment="Center" SelectedIndex="0">
+                                    <ComboBoxItem Content="Français (FR)"/>
+                                    <ComboBoxItem Content="English (US)"/>
+                                </ComboBox>
+                            </StackPanel>
+
+                            <StackPanel x:Name="PanelLogin" Visibility="Collapsed">
+                                <TextBlock Text="CONNEXION FX-GLOBAL" Foreground="White" FontSize="24" Margin="0,0,0,10" FontWeight="Bold"/>
+                                <TextBlock Text="Accédez à votre écosystème de suivi synchronisé." Foreground="Gray" FontSize="12" Margin="0,0,0,40"/>
+
+                                <TextBlock Text="EMAIL OU TÉLÉPHONE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <TextBox x:Name="TxtIdentifier" Style="{StaticResource CyberTextBox}" Height="45" Margin="0,0,0,25" FontSize="16" VerticalContentAlignment="Center"/>
+
+                                <TextBlock Text="MOT DE PASSE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <PasswordBox x:Name="TxtPassword" Style="{StaticResource CyberPasswordBox}" Height="45" Margin="0,0,0,30" FontSize="16" VerticalContentAlignment="Center"/>
+
+                                <Button Content="SE CONNECTER AU RÉSEAU" Click="Login_Click" Style="{StaticResource CyberButton}" Height="55" Margin="0,10,0,20" FontSize="14" FontWeight="Bold" Background="#1100f2ff"/>
+
+                                <Button Content="Pas encore de compte ? Créer un profil FX-Global" Background="Transparent" BorderThickness="0" 
+                                        Foreground="Cyan" Click="ShowRegister_Click" HorizontalAlignment="Center" Opacity="0.8"/>
+                            </StackPanel>
+
+                            <StackPanel x:Name="PanelProfile" Visibility="Collapsed">
+                                <TextBlock Text="PROFIL FX-GLOBAL" Foreground="White" FontSize="24" Margin="0,0,0,40" FontWeight="Bold"/>
+
+                                <Grid Margin="0,0,0,40">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <Ellipse Width="120" Height="120" Stroke="Cyan" StrokeThickness="2">
+                                        <Ellipse.Fill>
+                                            <ImageBrush x:Name="ImgUserSession" Stretch="UniformToFill"/>
+                                        </Ellipse.Fill>
+                                        <Ellipse.Effect>
+                                            <DropShadowEffect Color="Cyan" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
+                                        </Ellipse.Effect>
+                                    </Ellipse>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="30,0,0,0">
+                                        <TextBlock x:Name="TxtSessionName" Text="NOM UTILISATEUR" Foreground="White" FontSize="26" FontWeight="ExtraBold"/>
+                                        <Border Background="#1100ff00" HorizontalAlignment="Left" Padding="10,4" CornerRadius="4" Margin="0,8,0,0">
+                                            <TextBlock Text="MODE HORS-LIGNE DISPONIBLE" Foreground="LimeGreen" FontSize="10" FontWeight="Bold"/>
+                                        </Border>
+                                    </StackPanel>
+                                    
+                                </Grid>
+
+                                <UniformGrid Columns="2" Margin="0,0,0,30">
+                                    <StackPanel Margin="0,0,10,0">
+                                        <TextBlock Text="ADRESSE EMAIL" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
+                                        <TextBlock x:Name="TxtProfileEmail" Text="---" Foreground="White" FontSize="14"/>
+                                    </StackPanel>
+                                    <StackPanel Margin="10,0,0,0">
+                                        <TextBlock Text="NUMÉRO DE TÉLÉPHONE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
+                                        <TextBlock x:Name="TxtProfilePhone" Text="---" Foreground="White" FontSize="14"/>
+                                    </StackPanel>
+                                </UniformGrid>
+
+                                <TextBlock Text="MA SIGNATURE / BIO" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <Border Background="#050505" BorderBrush="#1A1A1A" BorderThickness="1" Padding="15" CornerRadius="8">
+                                    <TextBlock x:Name="TxtProfileBio" Text="Aucune description disponible." Foreground="Gray" TextWrapping="Wrap" FontStyle="Italic"/>
+                                </Border>
+
+                                <Button Content="SYNCHRONISER AVEC LE CLOUD" Style="{StaticResource CyberButton}" Margin="0,40,0,0" Height="50" Foreground="Cyan"/>
+                                <Separator Background="#1A1A1A" Margin="0,40"/>
+                                <Button x:Name="BtnLogout" Content="DÉCONNEXION" Click="Logout_Click" Style="{StaticResource CyberButton}" 
+                        Height="45" Foreground="#FF4545" BorderBrush="#331111" VerticalAlignment="Bottom" />
+                            </StackPanel>
+                            <StackPanel x:Name="PanelRegister" Visibility="Collapsed">
+                                <TextBlock Text="INSCRIPTION FX-GLOBAL" Foreground="White" FontSize="24" FontWeight="Bold"/>
+
+                                <StackPanel Orientation="Horizontal" Margin="0,30,0,40">
+                                    <Grid Cursor="Hand" MouseDown="SelectPhoto_Click">
+                                        <Ellipse Style="{StaticResource CircularProfileImage}">
+                                            <Ellipse.Fill>
+                                                <ImageBrush x:Name="ImgProfilePreview" Stretch="UniformToFill"/>
+                                            </Ellipse.Fill>
+                                        </Ellipse>
+                                        <Border Background="Cyan" Width="35" Height="35" CornerRadius="20" VerticalAlignment="Bottom" HorizontalAlignment="Right">
+                                            <TextBlock Text="+" Foreground="Black" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-2,0,0"/>
+                                        </Border>
+                                    </Grid>
+                                    <StackPanel VerticalAlignment="Center" Margin="25,0,0,0">
+                                        <TextBlock Text="IDENTITÉ VISUELLE" Foreground="White" FontSize="16" FontWeight="Bold"/>
+                                        <TextBlock Text="Format recommandé : JPG ou PNG" Foreground="Gray" FontSize="11"/>
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <TextBlock Text="NOM COMPLET" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <TextBox x:Name="RegFullName" Style="{StaticResource CyberTextBox}" Height="45" Margin="0,0,0,25"/>
+
+                                <Grid Margin="0,0,0,25">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Margin="0,0,15,0">
+                                        <TextBlock Text="EMAIL" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                        <TextBox x:Name="RegEmail" Style="{StaticResource CyberTextBox}" Height="45"/>
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Margin="15,0,0,0">
+                                        <TextBlock Text="TÉLÉPHONE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                        <TextBox x:Name="RegPhone" Style="{StaticResource CyberTextBox}" Height="45"/>
+                                    </StackPanel>
+                                </Grid>
+
+                                <TextBlock Text="BIO / SIGNATURE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <TextBox x:Name="RegBio" Style="{StaticResource CyberTextBox}" Height="80" TextWrapping="Wrap" AcceptsReturn="True" Margin="0,0,0,25" Padding="10"/>
+
+                                <TextBlock Text="MOT DE PASSE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                                <PasswordBox x:Name="RegPassword" Style="{StaticResource CyberPasswordBox}" Height="45" Margin="0,0,0,40"/>
+
+                                <Button Content="INITIALISER LE COMPTE" Style="{StaticResource CyberButton}" Height="55" FontWeight="Bold" Click="Register_Click"/>
+                                <Button Content="Retour à l'identification" Background="Transparent" BorderThickness="0" Foreground="Gray" Margin="0,20" Click="ShowLogin_Click"/>
+                            </StackPanel>
+
+                        </Grid>
+                    </ScrollViewer>
+
+                    <Border x:Name="CyberToast" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Center" 
+                            Background="#050505" BorderBrush="Cyan" BorderThickness="1" CornerRadius="4" Padding="20,10" Margin="0,0,0,30">
+                        <Border.Effect>
+                            <DropShadowEffect x:Name="ToastGlow" Color="Cyan" BlurRadius="15" Opacity="0.5" ShadowDepth="0"/>
+                        </Border.Effect>
+                        <StackPanel Orientation="Horizontal">
+                            <Grid Width="18" Height="18" Margin="0,0,12,0" VerticalAlignment="Center">
+                                <Ellipse x:Name="ToastIconCircle" Stroke="Cyan" StrokeThickness="2"/>
+                                <Path x:Name="ToastIconPath" Data="M 4,9 L 8,13 L 14,5" Stroke="Cyan" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            </Grid>
+                            <TextBlock x:Name="ToastText" Text="NOTIFICATION" Foreground="White" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>
