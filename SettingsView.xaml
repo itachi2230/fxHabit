@@ -70,7 +70,7 @@
                                 <TextBlock Text="MOT DE PASSE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
                                 <PasswordBox x:Name="TxtPassword" Style="{StaticResource CyberPasswordBox}" Height="45" Margin="0,0,0,30" FontSize="16" VerticalContentAlignment="Center"/>
 
-                                <Button Content="SE CONNECTER AU RÉSEAU" Click="Login_Click" Style="{StaticResource CyberButton}" Height="55" Margin="0,10,0,20" FontSize="14" FontWeight="Bold" Background="#1100f2ff"/>
+                                <Button Name="btnLogin" Content="SE CONNECTER" Click="Login_Click" Style="{StaticResource CyberButton}" Height="55" Margin="0,10,0,20" FontSize="14" FontWeight="Bold" Background="#1100f2ff"/>
 
                                 <Button Content="Pas encore de compte ? Créer un profil FX-Global" Background="Transparent" BorderThickness="0" 
                                         Foreground="Cyan" Click="ShowRegister_Click" HorizontalAlignment="Center" Opacity="0.8"/>
@@ -168,7 +168,7 @@
                                 <TextBlock Text="MOT DE PASSE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
                                 <PasswordBox x:Name="RegPassword" Style="{StaticResource CyberPasswordBox}" Height="45" Margin="0,0,0,40"/>
 
-                                <Button Content="INITIALISER LE COMPTE" Style="{StaticResource CyberButton}" Height="55" FontWeight="Bold" Click="Register_Click"/>
+                                <Button Name="btnRegister" Content="INITIALISER LE COMPTE" Style="{StaticResource CyberButton}" Height="55" FontWeight="Bold" Click="Register_Click"/>
                                 <Button Content="Retour à l'identification" Background="Transparent" BorderThickness="0" Foreground="Gray" Margin="0,20" Click="ShowLogin_Click"/>
                             </StackPanel>
 

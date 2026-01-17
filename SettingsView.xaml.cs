@@ -78,7 +78,7 @@ namespace FxHabit
             PanelRegister.Visibility = Visibility.Collapsed;
         }
 
-        private async void ShowNotification(string message, bool isError = false)
+        private async Task ShowNotification(string message, bool isError = false, bool keepOpen = false)
         {
             Color themeColor = isError ? Color.FromRgb(255, 69, 69) : Color.FromRgb(0, 255, 255);
             SolidColorBrush themeBrush = new SolidColorBrush(themeColor);
@@ -88,19 +88,34 @@ namespace FxHabit
             ToastGlow.Color = themeColor;
             ToastIconCircle.Stroke = themeBrush;
             ToastIconPath.Stroke = themeBrush;
-            ToastIconPath.Data = isError ? Geometry.Parse("M 5,5 L 13,13 M 13,5 L 5,13") : Geometry.Parse("M 4,9 L 8,13 L 14,5");
+
+            // Icone : Sablier pour le chargement, Croix pour erreur, Check pour succès
+            if (keepOpen && !isError)
+                ToastIconPath.Data = Geometry.Parse("M 5,5 L 15,5 L 10,10 L 5,15 L 15,15"); // Simple Sablier
+            else
+                ToastIconPath.Data = isError ? Geometry.Parse("M 5,5 L 13,13 M 13,5 L 5,13") : Geometry.Parse("M 4,9 L 8,13 L 14,5");
 
             CyberToast.Opacity = 0;
             CyberToast.Visibility = Visibility.Visible;
             DoubleAnimation fadeIn = new DoubleAnimation(1, TimeSpan.FromSeconds(0.2));
             CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeIn);
 
-            await Task.Delay(3000);
-            DoubleAnimation fadeOut = new DoubleAnimation(0, TimeSpan.FromSeconds(0.5));
+            if (!keepOpen)
+            {
+                await Task.Delay(3000);
+                DoubleAnimation fadeOut = new DoubleAnimation(0, TimeSpan.FromSeconds(0.5));
+                fadeOut.Completed += (s, e) => CyberToast.Visibility = Visibility.Collapsed;
+                CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            }
+        }
+
+        // Méthode pour forcer la fermeture
+        private void HideNotification()
+        {
+            DoubleAnimation fadeOut = new DoubleAnimation(0, TimeSpan.FromSeconds(0.3));
             fadeOut.Completed += (s, e) => CyberToast.Visibility = Visibility.Collapsed;
             CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeOut);
         }
-
         private void BtnAppTab_Click(object sender, RoutedEventArgs e) => ShowAppPanel();
         private void BtnAccountTab_Click(object sender, RoutedEventArgs e) => ShowAccountPanel();
 
@@ -127,7 +142,7 @@ namespace FxHabit
                 BtnLogout.Visibility = Visibility.Collapsed;
             }
         }
-
+        
         private async void Login_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TxtIdentifier.Text) || string.IsNullOrWhiteSpace(TxtPassword.Password))
@@ -136,40 +151,44 @@ namespace FxHabit
                 return;
             }
 
+            // --- DEBUT DU CHARGEMENT ---
+            btnLogin.IsEnabled = false; // Désactive le bouton
+            await ShowNotification("Connexion au serveur...", false, true); // Notification persistante
             // 1. Authentification pour obtenir le Token
             bool success = await _cloudService.LoginAsync(TxtIdentifier.Text, TxtPassword.Password);
 
             if (success)
             {
-                // 2. RÉCUPÉRATION DES INFOS DEPUIS LE SERVEUR
                 var profile = await _cloudService.GetProfileAsync();
 
                 if (profile != null)
                 {
+                    // TÉLÉCHARGEMENT DE L'IMAGE DE PROFIL DEPUIS LE SERVEUR
+                    string localImgPath = await _cloudService.DownloadProfileImageAsync(profile.ImagePath);
+
                     _isLoggedIn = true;
 
-                    // 3. Sauvegarde locale des vraies infos reçues du serveur
+                    // SAUVEGARDE LOCALE DÉFINITIVE
                     SaveSessionToDisk(
                         profile.FullName,
                         profile.Email,
                         profile.Phone,
                         profile.Bio,
-                        profile.ImagePath // Attention: ici c'est souvent une URL si ça vient du serveur
+                        localImgPath ?? profile.ImagePath // On garde le chemin local si téléchargé
                     );
 
-                    LoadSessionFromDisk(); // Met à jour l'UI (TxtProfileEmail, etc.)
-                    ShowNotification("Session synchronisée");
+                    LoadSessionFromDisk();
+                    // --- FIN DU CHARGEMENT (SUCCÈS) ---
+                    await ShowNotification("Connecté avec succès !");
                     ShowAccountPanel();
-                }
-                else
-                {
-                    ShowNotification("Erreur de synchronisation profil", true);
                 }
             }
             else
             {
-                ShowNotification("Identifiants invalides", true);
+                // --- FIN DU CHARGEMENT (ERREUR) ---
+                await ShowNotification("Échec de connexion : Identifiants incorrects", true);
             }
+            btnLogin.IsEnabled = true; // Réactive le bouton
         }
         private async void Register_Click(object sender, RoutedEventArgs e)
         {
@@ -179,6 +198,9 @@ namespace FxHabit
                 return;
             }
 
+            btnRegister.IsEnabled = false;
+
+            await ShowNotification("Création du profil et envoi de l'image...", false, true); 
             bool success = await _cloudService.RegisterAsync(RegEmail.Text, RegPhone.Text, RegPassword.Password, RegFullName.Text, RegBio.Text, selectedImagePath);
 
             if (success)
@@ -189,7 +211,8 @@ namespace FxHabit
                 SaveSessionToDisk(RegFullName.Text, RegEmail.Text, RegPhone.Text, RegBio.Text, selectedImagePath);
                 LoadSessionFromDisk(); // Met à jour l'UI avec les infos du fichier
 
-                ShowNotification("Profil créé et sauvegardé");
+                await ShowNotification("Compte créé !");
+                btnRegister.IsEnabled = true;
                 ShowAccountPanel();
             }
             else
@@ -233,7 +256,7 @@ namespace FxHabit
         }
         private void Logout_Click(object sender, RoutedEventArgs e)
         {
-            _cloudService.Logout();
+           
             _isLoggedIn = false;
             DeleteSessionFromDisk(); // Efface le fichier local
 
@@ -242,7 +265,8 @@ namespace FxHabit
             TxtProfileEmail.Text = "---";
 
             ShowNotification("Session locale effacée");
-            ShowAppPanel();
+            ShowAccountPanel();
+            _cloudService.Logout();
         }
 
         private void ShowRegister_Click(object sender, RoutedEventArgs e)

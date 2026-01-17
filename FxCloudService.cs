@@ -5,19 +5,22 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.IO;
+using System.Collections.Generic;
 
 namespace FxHabit.Services
 {
     public class FxCloudService
     {
         private static readonly HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080/") };
-        private const string TokenFileName = "session.bin"; // Fichier caché pour le token
+        private const string TokenFileName = "session.bin";
+        private readonly string _localProfileCache = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache");
 
         public string CurrentToken { get; private set; }
 
         public FxCloudService()
         {
             LoadToken();
+            if (!Directory.Exists(_localProfileCache)) Directory.CreateDirectory(_localProfileCache);
         }
 
         // --- AUTHENTIFICATION ---
@@ -26,35 +29,32 @@ namespace FxHabit.Services
         {
             var content = new MultipartFormDataContent();
             content.Add(new StringContent(email ?? ""), "email");
-            content.Add(new StringContent(phone ?? ""), "phoneNumber");
             content.Add(new StringContent(password), "password");
             content.Add(new StringContent(fullName), "fullName");
+            content.Add(new StringContent(phone ?? ""), "phone");
             content.Add(new StringContent(bio ?? ""), "bio");
 
             if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
             {
                 var fileContent = new ByteArrayContent(File.ReadAllBytes(imagePath));
-
-                // Détection automatique de l'extension pour le Content-Type
-                string extension = Path.GetExtension(imagePath).ToLower();
-                string mimeType = extension == ".png" ? "image/png" : "image/jpeg";
-
-                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse(mimeType);
-                content.Add(fileContent, "profilePicture", Path.GetFileName(imagePath));
+                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
+                content.Add(fileContent, "image", Path.GetFileName(imagePath));
             }
 
             var response = await _httpClient.PostAsync("api/register", content);
             return response.IsSuccessStatusCode;
         }
+
         public async Task<bool> LoginAsync(string identifier, string password)
         {
-            // Note: LexikJWT attend par défaut "username" pour l'identifiant (email ou tel)
-            var data = new { username = identifier, password = password };
+            // Note: Symfony attend 'username' pour LexikJWT par défaut
+            var data = new { identifier = identifier, password = password };
             var response = await _httpClient.PostAsync("api/login", GetJsonContent(data));
 
             if (response.IsSuccessStatusCode)
             {
-                var result = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                var json = await response.Content.ReadAsStringAsync();
+                var result = JsonDocument.Parse(json);
                 CurrentToken = result.RootElement.GetProperty("token").GetString();
                 SaveToken(CurrentToken);
                 return true;
@@ -62,64 +62,106 @@ namespace FxHabit.Services
             return false;
         }
 
+        // --- PROFIL & MISE À JOUR ---
 
         public async Task<UserSessionData> GetProfileAsync()
         {
             if (string.IsNullOrEmpty(CurrentToken)) return null;
 
+            SetAuthHeader();
             try
             {
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CurrentToken);
-                var response = await _httpClient.GetAsync("api/me"); // Route à configurer sur ton Symfony
-
+                var response = await _httpClient.GetAsync("api/me");
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
-                    // On désérialise directement vers notre classe de données
                     return JsonSerializer.Deserialize<UserSessionData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 }
             }
-            catch (Exception ex)
-            {
-            }
+            catch { }
             return null;
         }
-        // --- SYNCHRONISATION DES FICHIERS ---
 
-        public async Task<bool> UploadFileAsync(string localFilePath, string appName)
+        public async Task<bool> UpdateUserAsync(string fullName, string phone, string bio, string imagePath = null)
         {
             if (string.IsNullOrEmpty(CurrentToken)) return false;
 
-            string fileName = Path.GetFileName(localFilePath);
-            byte[] fileData = File.ReadAllBytes(localFilePath);
-
-            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CurrentToken);
-
-            // On envoie le fichier vers une route que nous allons créer en Symfony
             var content = new MultipartFormDataContent();
-            content.Add(new ByteArrayContent(fileData), "file", fileName);
-            content.Add(new StringContent(appName), "app_name");
+            content.Add(new StringContent(fullName ?? ""), "fullName");
+            content.Add(new StringContent(phone ?? ""), "phone");
+            content.Add(new StringContent(bio ?? ""), "bio");
 
-            var response = await _httpClient.PostAsync("api/sync/upload", content);
+            if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
+            {
+                var fileContent = new ByteArrayContent(File.ReadAllBytes(imagePath));
+                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
+                content.Add(fileContent, "image", Path.GetFileName(imagePath));
+            }
+
+            SetAuthHeader();
+            var response = await _httpClient.PostAsync("api/user/update", content);
             return response.IsSuccessStatusCode;
         }
 
-        // --- GESTION LOCALE DU TOKEN ---
+        // --- GESTION DES FICHIERS (IMAGE & SYNC) ---
+
+        public async Task<string> DownloadProfileImageAsync(string serverFileName)
+        {
+            if (string.IsNullOrEmpty(serverFileName) ) return null;
+
+            string localPath = Path.Combine(_localProfileCache, serverFileName);
+            if (File.Exists(localPath)) return localPath;
+
+            try
+            {
+                // On télécharge depuis le dossier public du Symfony
+                var response = await _httpClient.GetAsync($"profiles/{serverFileName}");
+                if (response.IsSuccessStatusCode)
+                {
+                    if (!Directory.Exists(_localProfileCache)) Directory.CreateDirectory(_localProfileCache);
+                    var bytes = await response.Content.ReadAsByteArrayAsync();
+                    File.WriteAllBytes(localPath, bytes);
+                    return localPath;
+                }
+                else { }
+            }
+            catch { }
+            return null;
+        }
+
+        public async Task<bool> UploadSyncFileAsync(string localPath, string type)
+        {
+            if (string.IsNullOrEmpty(CurrentToken) || !File.Exists(localPath)) return false;
+
+            var content = new MultipartFormDataContent();
+            var fileContent = new ByteArrayContent(File.ReadAllBytes(localPath));
+            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
+
+            content.Add(fileContent, "file", Path.GetFileName(localPath));
+            content.Add(new StringContent(type), "type"); // 'data', 'logs', ou 'stats'
+
+            SetAuthHeader();
+            var response = await _httpClient.PostAsync("api/storage/sync", content);
+            return response.IsSuccessStatusCode;
+        }
+
+        // --- UTILITAIRES ---
+
+        private void SetAuthHeader()
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CurrentToken);
+        }
 
         private void SaveToken(string token)
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
-            // Idéalement, chiffrer ici avec ProtectedData
             File.WriteAllText(path, token);
         }
 
         private void LoadToken()
         {
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
-            if (File.Exists(path))
-            {
-                CurrentToken = File.ReadAllText(path);
-            }
+            if (File.Exists(path)) CurrentToken = File.ReadAllText(path);
         }
 
         public void Logout()
@@ -127,6 +169,8 @@ namespace FxHabit.Services
             CurrentToken = null;
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
             if (File.Exists(path)) File.Delete(path);
+
+            
         }
 
         private StringContent GetJsonContent(object data)
