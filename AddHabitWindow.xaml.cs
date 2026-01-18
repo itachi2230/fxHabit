@@ -67,17 +67,13 @@ namespace FxHabit
                 icon = selectedIcon.Kind.ToString();
 
             // Récupérer la couleur
-            string color = "#00FFFF";
-            if (ColorPurple.IsChecked == true) color = "#BC13FE";
-            else if (ColorOrange.IsChecked == true) color = "#FF9D00";
-            else if (ColorGreen.IsChecked == true) color = "Lime";
-            else if (ColorRed.IsChecked == true) color = "#FF4545";
-            else if (ColorPink.IsChecked == true) color = "#FF007F";
-            else if (ColorYellow.IsChecked == true) color = "#FFFF00";
-            else if (ColorWhite.IsChecked == true) color = "#FFF9F7";
-            else if (ColorBlack.IsChecked == true) color = "#000000";
-            else if (ColorDarkBlue.IsChecked == true) color = "#FF0101";
-            else if (ColorDarkGreen.IsChecked == true) color = "#FF0578";
+            var selectedButton = new[] { ColorCyan, ColorPurple, ColorOrange, ColorGreen, ColorRed,
+                             ColorPink, ColorYellow, ColorWhite, ColorBlack,
+                             ColorDarkBlue, ColorDarkGreen }
+                      .FirstOrDefault(r => r.IsChecked == true);
+
+            // On récupère le Tag (la couleur), sinon "Cyan" par défaut
+            string color = selectedButton?.Tag?.ToString() ?? "Cyan";
 
             NewHabit = new Habit
             {

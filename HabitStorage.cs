@@ -12,8 +12,10 @@ namespace FxHabit
         // On définit le nom du dossier et le chemin complet
         private static readonly string FolderName = "Data";
         private static readonly string FileName = "habits.json";
+        private static readonly string StatsFolderName = "HabitStats";
+        public static readonly string appid = "FxHabit";
 
-        private static string GetFilePath()
+        public static string GetFilePath()
         {
             // Création du chemin vers le dossier Data à la racine de l'appli
             string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, FolderName);
@@ -26,7 +28,12 @@ namespace FxHabit
 
             return Path.Combine(folderPath, FileName);
         }
-
+        private static string GetHabitStatsPath(Guid habitId)
+        {
+            string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", StatsFolderName);
+            if (!Directory.Exists(folderPath)) Directory.CreateDirectory(folderPath);
+            return Path.Combine(folderPath, $"{habitId}.json");
+        }
         // Sauvegarder TOUTE la liste (Utile pour les réorganisations ou suppressions)
         public static void SaveAllHabits(IEnumerable<Habit> habits)
         {
@@ -93,15 +100,12 @@ namespace FxHabit
         {
             DateTime now = DateTime.Now;
 
-            // --- 1. SAUVEGARDE HEBDOMADAIRE (Dashboard) ---
+            // 1. Sauvegarde dans le fichier de la SEMAINE (pour le Dashboard global)
             string weeklyPath = GetWeeklyPath(now);
             UpdateLogFile(weeklyPath, habitId, now, value);
 
-            // --- 2. SAUVEGARDE HISTORIQUE DÉDIÉE (Stats Avancées) ---
-            string habitFolder = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HabitStats");
-            if (!Directory.Exists(habitFolder)) Directory.CreateDirectory(habitFolder);
-
-            string habitPath = Path.Combine(habitFolder, $"{habitId}.json");
+            // 2. Sauvegarde dans le fichier DÉDIÉ à l'habitude (pour les stats de l'habitude)
+            string habitPath = GetHabitStatsPath(habitId);
             UpdateLogFile(habitPath, habitId, now, value);
         }
         public static void OpenDataFolder()
@@ -185,7 +189,24 @@ namespace FxHabit
 
             return Path.Combine(folderPath, $"week_{weekNum}_{year}.json");
         }
+        public static List<HabitLog> LoadHabitStats(Guid habitId)
+        {
+            string folderPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Data", "HabitStats");
+            string filePath = Path.Combine(folderPath, $"{habitId}.json");
 
+            if (!File.Exists(filePath)) return new List<HabitLog>();
+
+            try
+            {
+                string json = File.ReadAllText(filePath);
+                return JsonSerializer.Deserialize<List<HabitLog>>(json) ?? new List<HabitLog>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Erreur chargement stats dédiées: {ex.Message}");
+                return new List<HabitLog>();
+            }
+        }
         public static List<HabitLog> LoadWeeklyLogs(DateTime date)
         {
             string path = GetWeeklyPath(date);
@@ -200,6 +221,7 @@ namespace FxHabit
         // Supprimer une habitude
         public static void DeleteHabit(Guid habitId)
         {
+            // 1. Supprimer l'habitude de la liste principale (habits.json)
             var habits = LoadHabits();
             var toRemove = habits.FirstOrDefault(h => h.Id == habitId);
             if (toRemove != null)
@@ -207,6 +229,22 @@ namespace FxHabit
                 habits.Remove(toRemove);
                 SaveAllHabits(habits);
             }
+
+            // 2. Supprimer le fichier de statistiques DÉDIÉ
+            try
+            {
+                string habitStatsPath = GetHabitStatsPath(habitId);
+                if (File.Exists(habitStatsPath))
+                {
+                    File.Delete(habitStatsPath);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Erreur suppression stats: {ex.Message}");
+            }
+
+            // Note : On ne touche pas au dossier "Logs" (weekly) pour garder l'historique global
         }
     }
     public class HabitLog { public Guid HabitId { get; set; } public DateTime Date { get; set; } public double ProgressValue { get; set; } }

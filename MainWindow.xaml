@@ -182,10 +182,75 @@
                                 </ItemsControl>
                             </StackPanel>
                         </ScrollViewer>
+                        <Border Grid.RowSpan="10" x:Name="CyberToast" Visibility="Collapsed" VerticalAlignment="Bottom" HorizontalAlignment="Center" 
+                            Background="#050505" BorderBrush="Cyan" BorderThickness="1" CornerRadius="4" Padding="20,10" Margin="0,0,0,30">
+                            <Border.Effect>
+                                <DropShadowEffect x:Name="ToastGlow" Color="Cyan" BlurRadius="15" Opacity="0.5" ShadowDepth="0"/>
+                            </Border.Effect>
+                            <StackPanel Orientation="Horizontal">
+                                <Grid Width="18" Height="18" Margin="0,0,12,0" VerticalAlignment="Center">
+                                    <Ellipse x:Name="ToastIconCircle" Stroke="Cyan" StrokeThickness="2"/>
+                                    <Path x:Name="ToastIconPath" Data="M 4,9 L 8,13 L 14,5" Stroke="Cyan" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                                </Grid>
+                                <TextBlock x:Name="ToastText" Text="NOTIFICATION" Foreground="White" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Border>
                     </Grid>
 
                     <Border Grid.Column="1" Background="#080808" Padding="20" BorderBrush="#1A1A1A" BorderThickness="1,0,0,0">
                         <StackPanel>
+                            <Border Background="#0D0D0D" CornerRadius="12" BorderBrush="#1A1A1A" BorderThickness="1" Margin="0,0,0,25">
+                                <Grid >
+                                    <Grid x:Name="CloudConnectedPanel" Visibility="Visible">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="Auto"/>
+                                        </Grid.RowDefinitions>
+
+                                        <Border Grid.Column="0" Width="42" Height="42" CornerRadius="21" BorderBrush="Cyan" BorderThickness="1.5">
+                                            <Border.Effect>
+                                                <DropShadowEffect Color="Cyan" BlurRadius="8" ShadowDepth="0"/>
+                                            </Border.Effect>
+                                            <Ellipse>
+                                                <Ellipse.Fill>
+                                                    <ImageBrush x:Name="UserProfileImage" ImageSource="pack://application:,,,/Resources/default_user.png"/>
+                                                </Ellipse.Fill>
+                                            </Ellipse>
+                                        </Border>
+
+                                        <StackPanel Grid.Column="1" Margin="12,0" VerticalAlignment="Center">
+                                            <TextBlock x:Name="TxtUserName" Text="User Name" Foreground="White" FontSize="13" FontWeight="Bold"/>
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="CloudCheck" Foreground="#00FF41" Width="12" Height="12" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="TxtLastSync" Text="Sync: 12:45" Foreground="Gray" FontSize="10" Margin="4,0,0,0"/>
+                                            </StackPanel>
+                                        </StackPanel>
+
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                            <Button Click="BtnSync_Click" ToolTip="Synchroniser maintenant" Style="{StaticResource CyberButton}" Width="32" Height="32" Padding="0" Background="Transparent" BorderThickness="0">
+                                                <materialDesign:PackIcon Kind="Sync" Foreground="Cyan" Width="18" Height="18"/>
+                                            </Button>
+                                            <Button Click="BtnLogout_Click" ToolTip="Déconnexion" Style="{StaticResource CyberButton}" Width="32" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Margin="4,0,0,0">
+                                                <materialDesign:PackIcon Kind="Logout" Foreground="#FF4545" Width="18" Height="18"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <Grid x:Name="CloudDisconnectedPanel" Visibility="Collapsed">
+                                        <Button Click="BtnLogin_Click" Style="{StaticResource CyberButton}" Background="#1100f2ff" BorderBrush="Cyan">
+                                            <StackPanel Orientation="Horizontal">
+                                                <materialDesign:PackIcon Kind="CloudOutline" Margin="0,0,10,0" VerticalAlignment="Center"/>
+                                                <TextBlock Text="SE CONNECTER AU CLOUD" FontSize="11" FontWeight="Bold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </Grid>
+                            </Border>
                             <TextBlock Text="RECAP ANNUEL" Foreground="Gray" FontSize="10" Margin="0,0,0,15"/>
                             <ItemsControl ItemsSource="{Binding YearlyActivity}">
                                 <ItemsControl.ItemsPanel>

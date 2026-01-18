@@ -1,11 +1,14 @@
-﻿using LiveCharts;
+﻿using FxHabit.Services;
+using LiveCharts;
 using LiveCharts.Wpf;
+using MaterialDesignThemes.Wpf;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,11 +29,44 @@ namespace FxHabit
     public partial class MainWindow : Window
     {
         MainViewModel vm = new MainViewModel();
+        private FxCloudService _cloudService = new FxCloudService();
+        private readonly string _sessionFilePath;
         public MainWindow()
         {
+            _sessionFilePath = _cloudService._sessionFilePath;
             InitializeComponent();
-            
+            LoadUserProfile();
             this.DataContext = vm;
+        }
+        public async Task ShowNotification(string message, bool isError = false, bool keepOpen = false)
+        {
+            Color themeColor = isError ? Color.FromRgb(255, 69, 69) : Color.FromRgb(0, 255, 255);
+            SolidColorBrush themeBrush = new SolidColorBrush(themeColor);
+
+            ToastText.Text = message.ToUpper();
+            CyberToast.BorderBrush = themeBrush;
+            ToastGlow.Color = themeColor;
+            ToastIconCircle.Stroke = themeBrush;
+            ToastIconPath.Stroke = themeBrush;
+
+            // Icone : Sablier pour le chargement, Croix pour erreur, Check pour succès
+            if (keepOpen && !isError)
+                ToastIconPath.Data = Geometry.Parse("M 5,5 L 15,5 L 10,10 L 5,15 L 15,15"); // Simple Sablier
+            else
+                ToastIconPath.Data = isError ? Geometry.Parse("M 5,5 L 13,13 M 13,5 L 5,13") : Geometry.Parse("M 4,9 L 8,13 L 14,5");
+
+            CyberToast.Opacity = 0;
+            CyberToast.Visibility = Visibility.Visible;
+            DoubleAnimation fadeIn = new DoubleAnimation(1, TimeSpan.FromSeconds(0.2));
+            CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+
+            if (!keepOpen)
+            {
+                await Task.Delay(3000);
+                DoubleAnimation fadeOut = new DoubleAnimation(0, TimeSpan.FromSeconds(0.5));
+                fadeOut.Completed += (s, e) => CyberToast.Visibility = Visibility.Collapsed;
+                CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeOut);
+            }
         }
         private void BtnAddHabit_Click(object sender, RoutedEventArgs e)
         {
@@ -77,6 +113,166 @@ namespace FxHabit
                 HabitStorage.DeleteHabit(habit.Id);
             }
         }
+        }
+        private void LoadUserProfile()
+        {
+            // 1. VERIFICATION DU FICHIER LOCAL (INSTANTANÉ)
+            if (File.Exists(_sessionFilePath))
+            {
+                try
+                {
+                    string json = File.ReadAllText(_sessionFilePath);
+                    var session = JsonSerializer.Deserialize<UserSessionData>(json);
+
+                    if (session != null && session.IsLoggedIn)
+                    {
+                        ApplyUserInterface(session);
+                        return; // On a affiché le profil local, on s'arrête là pour l'instant
+                    }
+                }
+                catch { /* Fichier corrompu ou illisible */ }
+            }
+
+            // 2. SI PAS DE FICHIER OU PAS CONNECTÉ
+            CloudConnectedPanel.Visibility = Visibility.Collapsed;
+            CloudDisconnectedPanel.Visibility = Visibility.Visible;
+        }
+
+        // Cette méthode met à jour l'UI avec les données qu'on lui donne (locales ou serveurs)
+        private void ApplyUserInterface(UserSessionData data)
+        {
+            CloudConnectedPanel.Visibility = Visibility.Visible;
+            CloudDisconnectedPanel.Visibility = Visibility.Collapsed;
+
+            TxtUserName.Text = data.FullName.ToUpper();
+            if (data.LastSyncDate.HasValue)
+            {
+                // Calcul du temps écoulé
+                TimeSpan diff = DateTime.Now - data.LastSyncDate.Value;
+                string timeAgo = FormatTimeAgo(diff);
+                TxtLastSync.Text = $"Synchro : {timeAgo}";
+            }
+            else
+            {
+                TxtLastSync.Text = "Jamais synchro";
+            }
+            // Chargement de l'image (Gestion du chemin local vs URL)
+            if (!string.IsNullOrEmpty(data.ImagePath) && File.Exists(data.ImagePath))
+            {
+                UserProfileImage.ImageSource = new BitmapImage(new Uri(data.ImagePath));
+            }
+            else
+            {
+                // Image par défaut si le chemin n'existe plus
+                UserProfileImage.ImageSource = new BitmapImage(new Uri("pack://application:,,,/Resources/default_user.png"));
+            }
+        }
+        private async void BtnSync_Click(object sender, RoutedEventArgs e)
+        {
+            string localPath = HabitStorage.GetFilePath();
+            // 1. On récupère le bouton, puis l'icône à l'intérieur
+            var btn = sender as Button;
+            var icon = btn?.Content as PackIcon;
+
+            if (icon == null) return; // Sécurité
+
+            // 2. Préparation de l'animation de rotation
+            var rotateTransform = new RotateTransform();
+            icon.RenderTransform = rotateTransform;
+            icon.RenderTransformOrigin = new Point(0.5, 0.5);
+
+            var animation = new DoubleAnimation
+            {
+                From = 0,
+                To = 360,
+                Duration = TimeSpan.FromSeconds(1),
+                RepeatBehavior = RepeatBehavior.Forever
+            };
+
+            // Lancement de l'animation
+            rotateTransform.BeginAnimation(RotateTransform.AngleProperty, animation);
+            btn.IsEnabled = false; // On désactive le bouton pendant la sync
+
+            try
+            {
+                // 1. Lancer la synchronisation
+                List<string> results = await _cloudService.SyncEverythingAsync(HabitStorage.appid);
+
+                // 2. Analyser les résultats
+                int totalFiles = results.Count;
+                int successCount = 0;
+                int errorCount = 0;
+
+                foreach (var res in results)
+                {
+                    // On considère comme "réussi" si c'est success ou déjà à jour
+                    if (res.Contains("success") || res.Contains("déjà à jour"))
+                        successCount++;
+                    else
+                        errorCount++;
+                }
+
+                // 3. Préparer le message résumé
+                string messageFinal;
+                bool isError = false;
+
+                if (totalFiles == 0)
+                {
+                    messageFinal = "Rien à synchroniser (dossier vide).";
+                }
+                else if (errorCount == 0)
+                {
+                    messageFinal = $"✅ Synchronisation réussie !\n{successCount} fichiers.";
+                }
+                else
+                {
+                    isError = true;
+                    messageFinal = $"⚠️ Synchro terminée avec des erreurs.\nRéussis : {successCount}\nÉchecs : {errorCount}\n\n" + string.Join("\n", results);
+                }
+
+                // 4. Afficher la notification avec le bon statut (isError)
+                if (successCount > 0)
+                {
+                    DateTime now = DateTime.Now;
+                    _cloudService.UpdateLocalLastSync(now);
+                    // Ici, tu peux aussi mettre à jour ton label UI :
+                    TxtLastSync.Text = "Sync: " + now.ToString("g");
+                }
+                await ShowNotification(messageFinal, isError, true);
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erreur Sync : " + ex.Message);
+            }
+            finally
+            {
+                // 3. Arrêt propre de l'animation et réactivation
+                rotateTransform.BeginAnimation(RotateTransform.AngleProperty, null);
+                btn.IsEnabled = true;
+            }
+        }
+        private string FormatTimeAgo(TimeSpan diff)
+        {
+            if (diff.TotalMinutes < 1) return "À l'instant";
+            if (diff.TotalMinutes < 60) return $"Il y a {(int)diff.TotalMinutes} min";
+            if (diff.TotalHours < 24) return $"Il y a {(int)diff.TotalHours} h";
+            return $"Le {diff.ToString(@"dd/MM/yyyy")}";
+        }
+        private void BtnLogout_Click(object sender, RoutedEventArgs e)
+        {
+            // On efface le fichier comme dans Settings
+            if (File.Exists(_sessionFilePath)) File.Delete(_sessionFilePath);
+
+            _cloudService.Logout();
+            LoadUserProfile(); // Va basculer sur le panneau "Se connecter"
+            SettingsViewControl._isLoggedIn = false;
+            SettingsViewControl.ShowAppPanel();
+        }
+        private void BtnLogin_Click(object sender, RoutedEventArgs e)
+        {
+            BtnSettings_Click(null, new RoutedEventArgs());
+            SettingsViewControl.ShowAccountPanel();
         }
 
         //actions graph
@@ -142,7 +338,7 @@ namespace FxHabit
             SettingsViewControl.Visibility = Visibility.Collapsed;
             DetailViewControl.Visibility = Visibility.Collapsed;
             DashboardView.Visibility = Visibility.Visible;
-
+            LoadUserProfile();
             BtnDashboard.Foreground = Brushes.Cyan;
             BtnSettings.Foreground = Brushes.Gray;
         }
@@ -194,7 +390,7 @@ namespace FxHabit
         }
 
         // Helper pour revenir au dashboard proprement
-        private void SwitchToDashboard()
+        public void SwitchToDashboard()
         {
             DetailViewControl.Visibility = Visibility.Collapsed;
             SettingsViewControl.Visibility = Visibility.Collapsed;
@@ -208,11 +404,7 @@ namespace FxHabit
         {
             vm.UpdateChart(null); // Réaffiche toutes les habitudes
         }
-        private void Overlay_OutsideClick(object sender, MouseButtonEventArgs e)
-        {
-            OverlayContainer.Visibility = Visibility.Collapsed;
-        }
-
+       
         private void CloseDetail_Click(object sender, RoutedEventArgs e)
         {
             OverlayContainer.Visibility = Visibility.Collapsed;

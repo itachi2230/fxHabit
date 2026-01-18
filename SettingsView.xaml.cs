@@ -21,6 +21,8 @@ namespace FxHabit
         public string Email { get; set; }
         public string Phone { get; set; }
         public string Bio { get; set; }
+        public DateTime? LastSyncDate { get; set; }
+
         public string ImagePath { get; set; }
     }
 
@@ -28,13 +30,14 @@ namespace FxHabit
     {
         private FxCloudService _cloudService = new FxCloudService();
         private string selectedImagePath = "";
-        private bool _isLoggedIn = false;
+        public bool _isLoggedIn = false;
 
         // Chemin du fichier local (dans AppData pour être persistant)
-        private readonly string _sessionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session_v1.json");
+        private readonly string _sessionFilePath  ;
 
         public SettingsView()
         {
+            _sessionFilePath = _cloudService._sessionFilePath;
             InitializeComponent();
             LoadSessionFromDisk(); // Charger les données au démarrage
             ShowAppPanel();
@@ -119,14 +122,15 @@ namespace FxHabit
         private void BtnAppTab_Click(object sender, RoutedEventArgs e) => ShowAppPanel();
         private void BtnAccountTab_Click(object sender, RoutedEventArgs e) => ShowAccountPanel();
 
-        private void ShowAppPanel()
+        public void ShowAppPanel()
         {
             HideAllPanels();
             UpdateTabVisuals(false);
             PanelApp.Visibility = Visibility.Visible;
+            TxtPassword.Clear();
         }
 
-        private void ShowAccountPanel()
+        public void ShowAccountPanel()
         {
             HideAllPanels();
             UpdateTabVisuals(true);
@@ -155,16 +159,15 @@ namespace FxHabit
             btnLogin.IsEnabled = false; // Désactive le bouton
             await ShowNotification("Connexion au serveur...", false, true); // Notification persistante
             // 1. Authentification pour obtenir le Token
-            bool success = await _cloudService.LoginAsync(TxtIdentifier.Text, TxtPassword.Password);
+            string success = await _cloudService.LoginAsync(TxtIdentifier.Text, TxtPassword.Password);
 
-            if (success)
+            if (success=="yes")
             {
                 var profile = await _cloudService.GetProfileAsync();
 
                 if (profile != null)
                 {
                     // TÉLÉCHARGEMENT DE L'IMAGE DE PROFIL DEPUIS LE SERVEUR
-                    string localImgPath = await _cloudService.DownloadProfileImageAsync(profile.ImagePath);
 
                     _isLoggedIn = true;
 
@@ -174,7 +177,7 @@ namespace FxHabit
                         profile.Email,
                         profile.Phone,
                         profile.Bio,
-                        localImgPath ?? profile.ImagePath // On garde le chemin local si téléchargé
+                        profile.ImagePath // On garde le chemin local si téléchargé
                     );
 
                     LoadSessionFromDisk();
@@ -186,7 +189,7 @@ namespace FxHabit
             else
             {
                 // --- FIN DU CHARGEMENT (ERREUR) ---
-                await ShowNotification("Échec de connexion : Identifiants incorrects", true);
+                await ShowNotification(success, true);
             }
             btnLogin.IsEnabled = true; // Réactive le bouton
         }
@@ -201,9 +204,9 @@ namespace FxHabit
             btnRegister.IsEnabled = false;
 
             await ShowNotification("Création du profil et envoi de l'image...", false, true); 
-            bool success = await _cloudService.RegisterAsync(RegEmail.Text, RegPhone.Text, RegPassword.Password, RegFullName.Text, RegBio.Text, selectedImagePath);
+            string success = await _cloudService.RegisterAsync(RegEmail.Text, RegPhone.Text, RegPassword.Password, RegFullName.Text, RegBio.Text, selectedImagePath);
 
-            if (success)
+            if (success=="yes")
             {
                 _isLoggedIn = true;
 
@@ -217,7 +220,7 @@ namespace FxHabit
             }
             else
             {
-                ShowNotification("Erreur création", true);
+                ShowNotification(success, true);
             }
         }
         private void LoadSessionFromDisk()

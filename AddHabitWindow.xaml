@@ -47,6 +47,48 @@
                 </Trigger>
             </Style.Triggers>
         </Style>
+        <Style x:Key="ColorChip" TargetType="RadioButton">
+            <Setter Property="Width" Value="28"/>
+            <Setter Property="Height" Value="28"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Grid>
+                            <Ellipse x:Name="Chip" 
+                             Fill="{TemplateBinding Foreground}" 
+                             StrokeThickness="2" 
+                             Stroke="Transparent"/>
+
+                            <Ellipse x:Name="Glow" 
+                             Fill="{TemplateBinding Foreground}" 
+                             Opacity="0">
+                                <Ellipse.Effect>
+                                    <BlurEffect Radius="15"/>
+                                </Ellipse.Effect>
+                            </Ellipse>
+
+                            <Ellipse x:Name="InnerCheck" 
+                             Width="8" Height="8" 
+                             Fill="White" 
+                             Visibility="Collapsed"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="Stroke" Value="White"/>
+                                <Setter TargetName="Glow" Property="Opacity" Value="0.3"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Glow" Property="Opacity" Value="0.6"/>
+                                <Setter TargetName="Chip" Property="Stroke" Value="White"/>
+                                <Setter TargetName="InnerCheck" Property="Visibility" Value="Visible"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
     </Window.Resources>
 
     <Grid>
@@ -181,17 +223,17 @@
 
                 <TextBlock Text="SIGNATURE VISUELLE (NÉON)" Style="{StaticResource SectionLabel}"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,4">
-                    <RadioButton x:Name="ColorCyan" Style="{StaticResource ColorChip}" Foreground="Cyan" />
-                    <RadioButton x:Name="ColorPurple" Style="{StaticResource ColorChip}" Foreground="#BC13FE"/>
-                    <RadioButton x:Name="ColorOrange" Style="{StaticResource ColorChip}" Foreground="#FF9D00"/>
-                    <RadioButton x:Name="ColorGreen" Style="{StaticResource ColorChip}" Foreground="Lime"/>
-                    <RadioButton x:Name="ColorRed" Style="{StaticResource ColorChip}" Foreground="#FF4545"/>
-                    <RadioButton x:Name="ColorPink" Style="{StaticResource ColorChip}" Foreground="#FF007F"/>
-                    <RadioButton x:Name="ColorYellow" Style="{StaticResource ColorChip}" Foreground="#FFFFFF00"/>
-                    <RadioButton x:Name="ColorWhite" Style="{StaticResource ColorChip}" Foreground="#FFF9F7F7"/>
-                    <RadioButton x:Name="ColorBlack" Style="{StaticResource ColorChip}" Foreground="#FF271D1D" IsChecked="True" Background="#FF271D1D"/>
-                    <RadioButton x:Name="ColorDarkBlue" Style="{StaticResource ColorChip}" Foreground="#FF0101A2"/>
-                    <RadioButton x:Name="ColorDarkGreen" Style="{StaticResource ColorChip}" Foreground="#FF057805"/>
+                    <RadioButton x:Name="ColorCyan" Style="{StaticResource ColorChip}" Foreground="Cyan" Tag="Cyan" IsChecked="True"/>
+                    <RadioButton x:Name="ColorPurple" Style="{StaticResource ColorChip}" Foreground="#BC13FE" Tag="#BC13FE"/>
+                    <RadioButton x:Name="ColorOrange" Style="{StaticResource ColorChip}" Foreground="#FF9D00" Tag="#FF9D00"/>
+                    <RadioButton x:Name="ColorGreen" Style="{StaticResource ColorChip}" Foreground="Lime" Tag="Lime"/>
+                    <RadioButton x:Name="ColorRed" Style="{StaticResource ColorChip}" Foreground="#FF4545" Tag="#FF4545"/>
+                    <RadioButton x:Name="ColorPink" Style="{StaticResource ColorChip}" Foreground="#FF007F" Tag="#FF007F"/>
+                    <RadioButton x:Name="ColorYellow" Style="{StaticResource ColorChip}" Foreground="Yellow" Tag="Yellow"/>
+                    <RadioButton x:Name="ColorWhite" Style="{StaticResource ColorChip}" Foreground="#FFF9F7" Tag="#FFF9F7"/>
+                    <RadioButton x:Name="ColorBlack" Style="{StaticResource ColorChip}" Foreground="#271D1D" Tag="#271D1D"/>
+                    <RadioButton x:Name="ColorDarkBlue" Style="{StaticResource ColorChip}" Foreground="#0101A2" Tag="#0101A2"/>
+                    <RadioButton x:Name="ColorDarkGreen" Style="{StaticResource ColorChip}" Foreground="#057805" Tag="#057805"/>
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

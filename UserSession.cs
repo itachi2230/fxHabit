@@ -13,5 +13,6 @@ namespace FxHabit
         public string Phone { get; set; }
         public string Bio { get; set; }
         public string LocalImagePath { get; set; }
+        public DateTime? LastSyncDate { get; set; }
     }
 }

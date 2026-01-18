@@ -48,6 +48,10 @@ namespace FxHabit
             // On prévient l'UI que tout a changé
             OnPropertyChanged(string.Empty);
         }
+        private void Back_Click(object sender, RoutedEventArgs e)
+        {
+            ReturnToHome();
+        }
         private int CalculateMaxStreak(List<HabitLog> logs, double goal)
         {
             int maxStreak = 0;
@@ -72,34 +76,38 @@ namespace FxHabit
         }
         private void CalculateStats(Guid habitId)
         {
-            string statsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HabitStats", $"{habitId}.json");
-            if (!File.Exists(statsPath)) return;
+            // 1. Chargement via le Storage (Stratégie centralisée)
+            var logs = HabitStorage.LoadHabitStats(habitId)
+                                   .OrderBy(l => l.Date)
+                                   .ToList();
 
-            var logs = JsonSerializer.Deserialize<List<HabitLog>>(File.ReadAllText(statsPath))
-                       .OrderBy(l => l.Date).ToList() ?? new List<HabitLog>();
+            if (logs.Count == 0)
+            {
+                SetEmptyState();
+                return;
+            }
 
             // --- 1. CALCULS DES WIDGETS DE BASE ---
             double total = logs.Sum(l => l.ProgressValue);
             TotalValueDisplay = $"{total} {_currentHabit.Unit}";
 
             int daysSuccess = logs.Count(l => l.ProgressValue >= _currentHabit.DailyGoal);
-            double rate = logs.Count > 0 ? (daysSuccess / (double)logs.Count) * 100 : 0;
+            double rate = (daysSuccess / (double)logs.Count) * 100;
             CompletionRate = $"{Math.Round(rate)}%";
-            CompletionPercentage = rate; // Pour la ProgressBar circulaire
+            CompletionPercentage = rate;
 
             // --- 2. CALCULS AVANCÉS (INSIGHTS) ---
             _currentHabit.Streak = CalculateCurrentStreak(logs, _currentHabit.DailyGoal);
             StreakDisplay = $"{_currentHabit.Streak} Jours";
             MaxStreak = $"{CalculateMaxStreak(logs, _currentHabit.DailyGoal)} Jours";
 
-            // Meilleur jour (Basé sur la moyenne de réussite par jour de semaine)
+            // Meilleur jour
             string[] frenchDays = { "Dimanche", "Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi" };
             var bestDayGroup = logs.GroupBy(l => l.Date.DayOfWeek)
                                    .OrderByDescending(g => g.Average(x => x.ProgressValue))
                                    .FirstOrDefault();
             BestDay = bestDayGroup != null ? frenchDays[(int)bestDayGroup.Key] : "N/A";
 
-            // Infos de l'habitude
             GoalDisplay = $"{_currentHabit.DailyGoal} {_currentHabit.Unit} / jour";
             CreatedAtDisplay = $"Suivi depuis le {logs.Min(l => l.Date):dd MMMM yyyy}";
 
@@ -112,24 +120,37 @@ namespace FxHabit
                 monthlyValues.Add(val);
             }
 
-            Color baseColor = (Color)ColorConverter.ConvertFromString(_currentHabit.ColorHex);
+            // Récupération sécurisée de la couleur
+            Color baseColor;
+            try
+            {
+                baseColor = (Color)ColorConverter.ConvertFromString(_currentHabit.ColorHex ?? "Cyan");
+            }
+            catch
+            {
+                baseColor = Colors.Cyan;
+            }
+
             MonthlySeries = new SeriesCollection {
         new LineSeries {
             Values = monthlyValues,
             Stroke = new SolidColorBrush(baseColor),
             Fill = new LinearGradientBrush(Color.FromArgb(40, baseColor.R, baseColor.G, baseColor.B), Colors.Transparent, 90),
             PointGeometrySize = 0,
-            LineSmoothness = 1
+            LineSmoothness = 0.6 // Un peu moins que 1 pour un look plus "technique"
         }
     };
 
-            // --- 4. DISTRIBUTION HEBDOMADAIRE (BARRÉS) ---
+            // --- 4. DISTRIBUTION HEBDOMADAIRE ---
             var dayAverages = new double[7];
-            for (int i = 1; i <= 7; i++)
+            // On commence par Lundi (index 1 dans DayOfWeek) jusqu'à Dimanche (index 0)
+            DayOfWeek[] weekOrder = { DayOfWeek.Monday, DayOfWeek.Tuesday, DayOfWeek.Wednesday, DayOfWeek.Thursday, DayOfWeek.Friday, DayOfWeek.Saturday, DayOfWeek.Sunday };
+
+            for (int i = 0; i < 7; i++)
             {
-                var day = (DayOfWeek)(i % 7);
+                var day = weekOrder[i];
                 var dayLogs = logs.Where(l => l.Date.DayOfWeek == day).ToList();
-                dayAverages[i - 1] = dayLogs.Count > 0 ? dayLogs.Average(l => l.ProgressValue) : 0;
+                dayAverages[i] = dayLogs.Count > 0 ? dayLogs.Average(l => l.ProgressValue) : 0;
             }
 
             WeeklyDistributionSeries = new SeriesCollection {
@@ -139,6 +160,20 @@ namespace FxHabit
             MaxColumnWidth = 15
         }
     };
+        }
+
+        // Pour éviter les bugs si l'habitude est toute neuve sans logs
+        private void SetEmptyState()
+        {
+            TotalValueDisplay = $"0 {_currentHabit.Unit}";
+            CompletionRate = "0%";
+            StreakDisplay = "0 Jours";
+            MaxStreak = "0 Jours";
+            BestDay = "N/A";
+            GoalDisplay = $"{_currentHabit.DailyGoal} {_currentHabit.Unit} / jour";
+            CreatedAtDisplay = "Aucune donnée enregistrée";
+            MonthlySeries = new SeriesCollection();
+            WeeklyDistributionSeries = new SeriesCollection();
         }
         // --- EVENEMENTS BOUTONS ---
         private int CalculateCurrentStreak(List<HabitLog> logs, double goal)
@@ -163,25 +198,19 @@ namespace FxHabit
             }
             return streak;
         }
-        private void Close_Click(object sender, RoutedEventArgs e)
-        {
-            // On remonte l'info à la fenêtre principale pour cacher l'overlay
-            var parent = Window.GetWindow(this) as MainWindow;
-            if (parent != null) parent.OverlayContainer.Visibility = Visibility.Collapsed;
-        }
-
+       
         private void Edit_Click(object sender, RoutedEventArgs e)
         {
             // Logique de modification
         }
         private void Delete_Click(object sender, RoutedEventArgs e)
         {
-            var result = MessageBox.Show($"Voulez-vous vraiment supprimer '{_currentHabit.Title}' et tout son historique ?",
-                                         "Confirmation de suppression",
-                                         MessageBoxButton.YesNo,
-                                         MessageBoxImage.Warning);
+            bool confirm = CyberMessageBox.Show(
+            "Voulez-vous vraiment supprimer définitivement cette mission ?",
+            "ALERTE SUPPRESSION",
+            true);
 
-            if (result == MessageBoxResult.Yes)
+            if (confirm)
             {
                 var mainWindow = Window.GetWindow(this) as MainWindow;
                 var vm = mainWindow?.DataContext as MainViewModel;
@@ -190,23 +219,27 @@ namespace FxHabit
                 {
                     // 1. Supprimer de la liste Observable (Maj interface)
                     vm.HabitList.Remove(_currentHabit);
-
-                    // 2. Supprimer le fichier de stats dédié
-                    string statsPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "HabitStats", $"{_currentHabit.Id}.json");
-                    if (File.Exists(statsPath)) File.Delete(statsPath);
-
-                    // 3. Sauvegarder la liste globale mise à jour (si tu as une fonction SaveAll)
-                    // HabitStorage.SaveAllHabits(vm.HabitList); 
-
-                    // 4. Fermer l'overlay et rafraîchir le dashboard
-                    mainWindow.OverlayContainer.Visibility = Visibility.Collapsed;
+                    HabitStorage.DeleteHabit(_currentHabit.Id);
                     vm.RefreshData();
+                    ReturnToHome();
                 }
             }
         }
         protected void OnPropertyChanged(string name)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+        private void ReturnToHome()
+        {
+            // On cherche la MainWindow (le parent de l'application)
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+
+            if (mainWindow != null)
+            {
+                // On appelle la méthode de la MainWindow qui affiche la liste des habitudes
+                // Si ta méthode s'appelle 'ShowHabitsList' ou 'NavigateToDashboard' :
+                mainWindow.SwitchToDashboard();
+            }
         }
     }
 }
