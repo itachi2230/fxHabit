@@ -38,7 +38,7 @@ namespace FxHabit
             LoadUserProfile();
             this.DataContext = vm;
         }
-        public async Task ShowNotification(string message, bool isError = false, bool keepOpen = false)
+        public async Task ShowNotification(string message, bool isError = false, bool keepOpen = false,double secondes=0.2)
         {
             Color themeColor = isError ? Color.FromRgb(255, 69, 69) : Color.FromRgb(0, 255, 255);
             SolidColorBrush themeBrush = new SolidColorBrush(themeColor);
@@ -57,7 +57,7 @@ namespace FxHabit
 
             CyberToast.Opacity = 0;
             CyberToast.Visibility = Visibility.Visible;
-            DoubleAnimation fadeIn = new DoubleAnimation(1, TimeSpan.FromSeconds(0.2));
+            DoubleAnimation fadeIn = new DoubleAnimation(1, TimeSpan.FromSeconds(secondes));
             CyberToast.BeginAnimation(UIElement.OpacityProperty, fadeIn);
 
             if (!keepOpen)
@@ -238,7 +238,7 @@ namespace FxHabit
                     // Ici, tu peux aussi mettre à jour ton label UI :
                     TxtLastSync.Text = "Sync: " + now.ToString("g");
                 }
-                await ShowNotification(messageFinal, isError, true);
+                await ShowNotification(messageFinal, isError, false,0.5);
 
             }
             catch (Exception ex)

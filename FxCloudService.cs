@@ -58,6 +58,10 @@ namespace FxHabit.Services
 
                 if (response.IsSuccessStatusCode)
                 {
+                    if (email != null) { await LoginAsync(email, password); }
+                    else if (phone != null) { await LoginAsync(phone, password); }
+                    else { }
+                    
                     return "yes";
                 }
                 else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
@@ -124,7 +128,7 @@ namespace FxHabit.Services
             try
             {
                 var data = new { refresh_token = RefreshToken };
-                var response = await _httpClient.PostAsync("api/token/refresh", GetJsonContent(data));
+                var response = await _httpClient.PostAsync("token/refresh", GetJsonContent(data));
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -165,7 +169,7 @@ namespace FxHabit.Services
         {
             return new List<SyncItem>
             {
-                new SyncItem { LocalPath = "data/", RemoteRelativePath = "data/", IsDirectory = true }
+                new SyncItem { LocalPath = "data/", RemoteRelativePath = "data/", IsDirectory =true }
             };
         }
         public async Task<UserSessionData> GetProfileAsync()
@@ -292,7 +296,7 @@ namespace FxHabit.Services
             fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
             content.Add(fileContent, "file", Path.GetFileName(localPath));
             content.Add(new StringContent(type), "type");
-
+                    
             var response = await SecureRequestAsync(() => _httpClient.PostAsync("api/storage/sync", content));
             return response.IsSuccessStatusCode;
         }
@@ -371,6 +375,7 @@ namespace FxHabit.Services
 
         private void SetAuthHeader()
         {
+            LoadTokens();
             _httpClient.DefaultRequestHeaders.Authorization = null; // Clean avant ajout
             if (!string.IsNullOrEmpty(CurrentToken))
             {
