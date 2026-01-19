@@ -287,6 +287,36 @@ namespace FxHabit.Services
             return null;
         }
 
+        public async Task<List<string>> FullSyncAsync(string appId)
+        {
+            var reports = new List<string>();
+            reports.Add($"--- Début de la synchronisation complète ({DateTime.Now:HH:mm}) ---");
+
+            try
+            {
+                // ÉTAPE 1 : Upload des fichiers locaux vers le serveur
+                // On envoie d'abord nos modifs pour ne pas les écraser par un download
+                reports.Add("Vérification des modifications locales...");
+                var uploadReports = await SyncEverythingAsync(appId);
+                reports.AddRange(uploadReports);
+
+                // ÉTAPE 2 : Download des fichiers du serveur qui nous manquent
+                reports.Add("Vérification des fichiers distants...");
+                var downloadResult = await SyncFromServerAsync(appId);
+                reports.Add(downloadResult);
+
+                // ÉTAPE 3 : Mise à jour de la date de dernière synchro locale
+                UpdateLocalLastSync(DateTime.Now);
+
+                reports.Add("--- Synchronisation terminée avec succès ---");
+            }
+            catch (Exception ex)
+            {
+                reports.Add($"!!! Erreur critique durant la synchro : {ex.Message}");
+            }
+
+            return reports;
+        }
         public async Task<bool> UploadSyncFileAsync(string localPath, string type)
         {
             if (string.IsNullOrEmpty(CurrentToken) || !File.Exists(localPath)) return false;
@@ -371,6 +401,83 @@ namespace FxHabit.Services
                 return "erreur: " + ex.Message;
             }
         }
+
+        // --- RÉCUPÉRATION DEPUIS LE CLOUD ---
+
+        public async Task<string> SyncFromServerAsync(string appId)
+        {
+            try
+            {
+                // 1. Récupérer la liste des fichiers sur le serveur
+                var response = await SecureRequestAsync(() => _httpClient.GetAsync($"api/cloud/list?app_id={appId}"));
+                if (!response.IsSuccessStatusCode) return $"Erreur liste serveur ({response.StatusCode})";
+
+                var json = await response.Content.ReadAsStringAsync();
+                var manifest = JsonSerializer.Deserialize<CloudManifest>(json);
+
+                int downloadedCount = 0;
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+                foreach (var remoteFile in manifest.files)
+                {
+                    string localPath = Path.Combine(baseDir, remoteFile.path);
+                    bool shouldDownload = false;
+
+                    if (!File.Exists(localPath))
+                    {
+                        shouldDownload = true; // Le fichier n'existe pas du tout
+                    }
+                    else
+                    {
+                        // Le fichier existe, on compare les Hashes
+                        string localHash = GetFileHash(localPath);
+                        if (localHash != remoteFile.hash)
+                        {
+                            shouldDownload = true; // Le fichier a été modifié sur le serveur
+                        }
+                    }
+
+                    if (shouldDownload)
+                    {
+                        bool success = await DownloadFileAsync(appId, remoteFile.path, localPath);
+                        if (success) downloadedCount++;
+                    }
+                }
+
+                return $"Synchro terminée : {downloadedCount} fichiers mis à jour.";
+            }
+            catch (Exception ex)
+            {
+                return $"Erreur synchro: {ex.Message}";
+            }
+        }
+
+        private async Task<bool> DownloadFileAsync(string appId, string remotePath, string localPath)
+        {
+            try
+            {
+                // On encode le chemin pour l'URL (gestion des espaces, etc.)
+                string url = $"api/cloud/download?app_id={appId}&target_path={Uri.EscapeDataString(remotePath)}";
+
+                var response = await SecureRequestAsync(() => _httpClient.GetAsync(url));
+                if (response.IsSuccessStatusCode)
+                {
+                    // Créer les dossiers parents si nécessaire
+                    string directory = Path.GetDirectoryName(localPath);
+                    if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+
+                    // Écriture du flux binaire directement sur le disque (efficace pour la RAM)
+                    using (var fs = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                    {
+                        await response.Content.CopyToAsync(fs);
+                    }
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         // --- UTILITAIRES & ÉTAT ---
 
         private void SetAuthHeader()
@@ -468,5 +575,18 @@ namespace FxHabit.Services
         public string LocalPath { get; set; }        // Chemin sur le PC
         public string RemoteRelativePath { get; set; } // Chemin dans le cloud
         public bool IsDirectory { get; set; }        // Est-ce un dossier complet ?
+    }
+    public class CloudManifest
+    {
+        public string app_id { get; set; }
+        public List<CloudFileInfo> files { get; set; }
+    }
+
+    public class CloudFileInfo
+    {
+        public string path { get; set; }
+        public string hash { get; set; }
+        public long size { get; set; }
+        public long last_modified { get; set; }
     }
 }

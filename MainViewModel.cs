@@ -15,7 +15,7 @@
             private SeriesCollection _chartSeries;
             private List<string> _labels;
         // Séparation des listes pour le design
-        public IEnumerable<Habit> PendingHabits => HabitList.Where(h => !IsCompletedToday(h));
+            public IEnumerable<Habit> PendingHabits => HabitList.Where(h => !IsCompletedToday(h));
             public IEnumerable<Habit> CompletedHabits => HabitList.Where(h => IsCompletedToday(h));
 
             public ObservableCollection<Habit> HabitList

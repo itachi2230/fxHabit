@@ -169,7 +169,6 @@ namespace FxHabit
         }
         private async void BtnSync_Click(object sender, RoutedEventArgs e)
         {
-            string localPath = HabitStorage.GetFilePath();
             // 1. On récupère le bouton, puis l'icône à l'intérieur
             var btn = sender as Button;
             var icon = btn?.Content as PackIcon;
@@ -195,61 +194,52 @@ namespace FxHabit
 
             try
             {
-                // 1. Lancer la synchronisation
-                List<string> results = await _cloudService.SyncEverythingAsync(HabitStorage.appid);
+                // 2. Lancer la synchronisation
+                List<string> results = await _cloudService.FullSyncAsync(HabitStorage.appid);
 
-                // 2. Analyser les résultats
-                int totalFiles = results.Count;
-                int successCount = 0;
-                int errorCount = 0;
+                // 3. Analyse intelligente des résultats
+                // On vérifie si une ligne contient "success" ou "mis à jour"
+                int changeCount = results.Count(line => line.Contains("success") || line.Contains("mis à jour") && !line.Contains("0"));
+                bool hasCriticalError = results.Any(line => line.Contains("!!! Erreur") || line.Contains("inaccessible"));
 
-                foreach (var res in results)
-                {
-                    // On considère comme "réussi" si c'est success ou déjà à jour
-                    if (res.Contains("success") || res.Contains("déjà à jour"))
-                        successCount++;
-                    else
-                        errorCount++;
-                }
-
-                // 3. Préparer le message résumé
+                // Construction du message de notification
                 string messageFinal;
-                bool isError = false;
+                bool isError = hasCriticalError;
 
-                if (totalFiles == 0)
+                if (hasCriticalError)
                 {
-                    messageFinal = "Rien à synchroniser (dossier vide).";
+                    messageFinal = "La synchronisation a échoué. Vérifiez votre connexion.";
                 }
-                else if (errorCount == 0)
+                else if (changeCount > 0)
                 {
-                    messageFinal = $"✅ Synchronisation réussie !\n{successCount} fichiers.";
+                    messageFinal = $"Synchro réussie : {changeCount} éléments synchronisés.";
+
+                    // Mise à jour de l'UI pour la date
+                    DateTime now = DateTime.Now;
+                    _cloudService.UpdateLocalLastSync(now);
+                    TxtLastSync.Text = "Sync: " + now.ToString("g");
                 }
                 else
                 {
-                    isError = true;
-                    messageFinal = $"⚠️ Synchro terminée avec des erreurs.\nRéussis : {successCount}\nÉchecs : {errorCount}\n\n" + string.Join("\n", results);
+                    messageFinal = "Tout est déjà à jour.";
                 }
 
-                // 4. Afficher la notification avec le bon statut (isError)
-                if (successCount > 0)
-                {
-                    DateTime now = DateTime.Now;
-                    _cloudService.UpdateLocalLastSync(now);
-                    // Ici, tu peux aussi mettre à jour ton label UI :
-                    TxtLastSync.Text = "Sync: " + now.ToString("g");
-                }
-                await ShowNotification(messageFinal, isError, false,0.5);
-
+                // 4. Afficher la notification (0.5 pour la durée ou l'opacité selon ton helper)
+                await ShowNotification(messageFinal, isError, true, 0.5);
             }
             catch (Exception ex)
             {
                 Console.WriteLine("Erreur Sync : " + ex.Message);
+                await ShowNotification("Erreur imprévue : " + ex.Message, true, true, 0.5);
             }
             finally
             {
-                // 3. Arrêt propre de l'animation et réactivation
-                rotateTransform.BeginAnimation(RotateTransform.AngleProperty, null);
+                // 5. Arrêt propre de l'animation et réactivation
+                if (rotateTransform != null)
+                    rotateTransform.BeginAnimation(RotateTransform.AngleProperty, null);
+
                 btn.IsEnabled = true;
+                rechargeTotal();
             }
         }
         private string FormatTimeAgo(TimeSpan diff)
@@ -274,7 +264,11 @@ namespace FxHabit
             BtnSettings_Click(null, new RoutedEventArgs());
             SettingsViewControl.ShowAccountPanel();
         }
-
+        public void rechargeTotal()
+        {
+            vm = new MainViewModel();
+            this.DataContext = vm;
+        }
         //actions graph
         private void PrevWeek_Click(object sender, RoutedEventArgs e)
         {
