@@ -77,7 +77,11 @@
                             </StackPanel>
 
                             <StackPanel x:Name="PanelProfile" Visibility="Collapsed">
-                                <TextBlock Text="PROFIL FX-GLOBAL" Foreground="White" FontSize="24" Margin="0,0,0,40" FontWeight="Bold"/>
+                                <Grid Margin="0,0,0,40">
+                                    <TextBlock Text="PROFIL FX-GLOBAL" Foreground="White" FontSize="24" FontWeight="Bold" VerticalAlignment="Center"/>
+                                    <Button x:Name="BtnEditToggle" Content="MODIFIER" HorizontalAlignment="Right" Style="{StaticResource CyberButton}" 
+                Width="100" Height="30" FontSize="10" Click="BtnEditToggle_Click"/>
+                                </Grid>
 
                                 <Grid Margin="0,0,0,40">
                                     <Grid.ColumnDefinitions>
@@ -85,44 +89,58 @@
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
-                                    <Ellipse Width="120" Height="120" Stroke="Cyan" StrokeThickness="2">
-                                        <Ellipse.Fill>
-                                            <ImageBrush x:Name="ImgUserSession" Stretch="UniformToFill"/>
-                                        </Ellipse.Fill>
-                                        <Ellipse.Effect>
-                                            <DropShadowEffect Color="Cyan" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
-                                        </Ellipse.Effect>
-                                    </Ellipse>
+                                    <Grid Cursor="Hand" MouseDown="SelectPhotoUpdate_Click">
+                                        <Ellipse Width="120" Height="120" Stroke="Cyan" StrokeThickness="2">
+                                            <Ellipse.Fill>
+                                                <ImageBrush x:Name="ImgUserSession" Stretch="UniformToFill"/>
+                                            </Ellipse.Fill>
+                                            <Ellipse.Effect>
+                                                <DropShadowEffect Color="Cyan" BlurRadius="20" ShadowDepth="0" Opacity="0.4"/>
+                                            </Ellipse.Effect>
+                                        </Ellipse>
+                                        <Border x:Name="EditPhotoOverlay" Background="#AA000000" CornerRadius="60" Visibility="Collapsed">
+                                            <TextBlock Text="CHANGER" Foreground="Cyan" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                    </Grid>
 
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="30,0,0,0">
                                         <TextBlock x:Name="TxtSessionName" Text="NOM UTILISATEUR" Foreground="White" FontSize="26" FontWeight="ExtraBold"/>
+                                        <TextBox x:Name="EditFullName" Style="{StaticResource CyberTextBox}" Visibility="Collapsed" Height="40" FontSize="18"/>
+
                                         <Border Background="#1100ff00" HorizontalAlignment="Left" Padding="10,4" CornerRadius="4" Margin="0,8,0,0">
                                             <TextBlock Text="MODE HORS-LIGNE DISPONIBLE" Foreground="LimeGreen" FontSize="10" FontWeight="Bold"/>
                                         </Border>
                                     </StackPanel>
-                                    
                                 </Grid>
 
-                                <UniformGrid Columns="2" Margin="0,0,0,30">
-                                    <StackPanel Margin="0,0,10,0">
-                                        <TextBlock Text="ADRESSE EMAIL" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
-                                        <TextBlock x:Name="TxtProfileEmail" Text="---" Foreground="White" FontSize="14"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="10,0,0,0">
-                                        <TextBlock Text="NUMÉRO DE TÉLÉPHONE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
-                                        <TextBlock x:Name="TxtProfilePhone" Text="---" Foreground="White" FontSize="14"/>
-                                    </StackPanel>
-                                </UniformGrid>
+                                <UniformGrid Columns="2" Margin="30">
+        <StackPanel Margin="0,0,10,0">
+                                    <TextBlock Text="ADRESSE EMAIL" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
+                                    <TextBlock x:Name="TxtProfileEmail" Text="---" Foreground="White" FontSize="14"/>
+                            </StackPanel>
+                            <StackPanel Margin="10,0,0,0">
+                                <TextBlock Text="NUMÉRO DE TÉLÉPHONE" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,5"/>
+                                <TextBlock x:Name="TxtProfilePhone" Text="---" Foreground="White" FontSize="14" />
+                                <TextBox x:Name="EditPhone" Style="{StaticResource CyberTextBox}" Visibility="Collapsed" Height="35"/>
+                            </StackPanel>
+                            </UniformGrid>
 
-                                <TextBlock Text="MA SIGNATURE / BIO" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
-                                <Border Background="#050505" BorderBrush="#1A1A1A" BorderThickness="1" Padding="15" CornerRadius="8">
+                            <TextBlock Text="MA SIGNATURE / BIO" Foreground="Gray" FontSize="11" FontWeight="Bold" Margin="0,0,0,10"/>
+                            <Border Background="#050505" BorderBrush="#1A1A1A" BorderThickness="1" Padding="15" CornerRadius="8">
+                                <Grid>
                                     <TextBlock x:Name="TxtProfileBio" Text="Aucune description disponible." Foreground="Gray" TextWrapping="Wrap" FontStyle="Italic"/>
-                                </Border>
+                                    <TextBox x:Name="EditBio" Style="{StaticResource CyberTextBox}" Visibility="Collapsed" Height="80" TextWrapping="Wrap" AcceptsReturn="True"/>
+                                </Grid>
+                            </Border>
 
-                                <Button Content="SYNCHRONISER AVEC LE CLOUD" Style="{StaticResource CyberButton}" Margin="0,40,0,0" Height="50" Foreground="Cyan"/>
-                                <Separator Background="#1A1A1A" Margin="0,40"/>
-                                <Button x:Name="BtnLogout" Content="DÉCONNEXION" Click="Logout_Click" Style="{StaticResource CyberButton}" 
-                        Height="45" Foreground="#FF4545" BorderBrush="#331111" VerticalAlignment="Bottom" />
+                            <StackPanel x:Name="ActionButtons" Margin="0,40,0,0">
+                                    <Button x:Name="BtnSaveProfile" Content="SAUVEGARDER LES MODIFICATIONS" Visibility="Collapsed" 
+                Style="{StaticResource CyberButton}" Height="50" Foreground="Cyan" Click="BtnSaveProfile_Click"/>
+                                </StackPanel>
+
+                            <Separator Background="#1A1A1A" Margin="0,8"/>
+                            <Button x:Name="BtnLogout" Content="DÉCONNEXION" Click="Logout_Click" Style="{StaticResource CyberButton}" 
+            Height="45" Foreground="#FF4545" BorderBrush="#331111" />
                             </StackPanel>
                             <StackPanel x:Name="PanelRegister" Visibility="Collapsed">
                                 <TextBlock Text="INSCRIPTION FX-GLOBAL" Foreground="White" FontSize="24" FontWeight="Bold"/>

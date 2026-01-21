@@ -184,6 +184,7 @@ namespace FxHabit.Services
                     var json = await response.Content.ReadAsStringAsync();
                     var session= JsonSerializer.Deserialize<UserSessionData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                     session.ImagePath=await DownloadProfileImageAsync(session.ImagePath);
+                    SaveSessionToDisk(session.FullName,session.Email,session.Phone,session.Bio,session.ImagePath);
                     return session;
 
                 }
@@ -245,26 +246,6 @@ namespace FxHabit.Services
 
             return reports;
         }
-        public async Task<bool> UpdateUserAsync(string fullName, string phone, string bio, string imagePath = null)
-        {
-            if (string.IsNullOrEmpty(CurrentToken)) return false;
-
-            var content = new MultipartFormDataContent();
-            content.Add(new StringContent(fullName ?? ""), "fullName");
-            content.Add(new StringContent(phone ?? ""), "phone");
-            content.Add(new StringContent(bio ?? ""), "bio");
-
-            if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
-            {
-                var fileContent = new ByteArrayContent(File.ReadAllBytes(imagePath));
-                fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
-                content.Add(fileContent, "image", Path.GetFileName(imagePath));
-            }
-
-            var response = await SecureRequestAsync(() => _httpClient.PostAsync("api/user/update", content));
-            return response.IsSuccessStatusCode;
-        }
-
         // --- GESTION DES FICHIERS ---
 
         public async Task<string> DownloadProfileImageAsync(string serverFileName)
@@ -286,7 +267,50 @@ namespace FxHabit.Services
             catch { }
             return null;
         }
+        public async Task<(bool success, string message, string newImagePath)> UpdateUserProfileAsync(string fullName, string phone, string bio, string localImagePath = null)
+        {
+            try
+            {
+                using (var content = new MultipartFormDataContent())
+                {
+                    // Ajout des champs texte
+                    content.Add(new StringContent(fullName ?? ""), "fullName");
+                    content.Add(new StringContent(phone ?? ""), "phone");
+                    content.Add(new StringContent(bio ?? ""), "bio");
 
+                    // Ajout de l'image si un chemin local est fourni
+                    if (!string.IsNullOrEmpty(localImagePath) && File.Exists(localImagePath))
+                    {
+                        var fileStream = new FileStream(localImagePath, FileMode.Open, FileAccess.Read);
+                        var fileContent = new StreamContent(fileStream);
+                        fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+                        content.Add(fileContent, "image", Path.GetFileName(localImagePath));
+                    }
+
+                    var response = await SecureRequestAsync(() =>
+                        _httpClient.PostAsync("api/user/update", content)
+                    );
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        var json = await response.Content.ReadAsStringAsync();
+                        using (var doc = JsonDocument.Parse(json))
+                        {
+                            string serverImagePath = doc.RootElement.GetProperty("imagePath").GetString();
+                            string mail = doc.RootElement.GetProperty("email").GetString();
+                            SaveSessionToDisk(fullName, mail, phone, bio, serverImagePath);
+                            return (true, "Profil mis à jour !", serverImagePath);
+                        }
+                    }
+
+                    return (false, $"Erreur: {response.StatusCode}", null);
+                }
+            }
+            catch (Exception ex)
+            {
+                return (false, $"Erreur réseau : {ex.Message}", null);
+            }
+        }
         public async Task<List<string>> FullSyncAsync(string appId)
         {
             var reports = new List<string>();
@@ -479,7 +503,34 @@ namespace FxHabit.Services
         }
 
         // --- UTILITAIRES & ÉTAT ---
+        #region PERSISTENCE LOCALE (FICHIER)
+        public void SaveSessionToDisk(string name, string email, string phone, string bio, string imgPath)
+        {
+            try
+            {
+                var session = new UserSessionData
+                {
+                    IsLoggedIn = true,
+                    FullName = name,
+                    Email = email,
+                    Phone = phone,
+                    Bio = bio,
+                    ImagePath = imgPath
+                };
 
+                string json = JsonSerializer.Serialize(session);
+                File.WriteAllText(_sessionFilePath, json);
+            }
+            catch (Exception ex) {  }
+        }
+
+
+        public void DeleteSessionFromDisk()
+        {
+            if (File.Exists(_sessionFilePath)) File.Delete(_sessionFilePath);
+        }
+
+        #endregion
         private void SetAuthHeader()
         {
             LoadTokens();
@@ -514,6 +565,7 @@ namespace FxHabit.Services
             RefreshToken = null;
             string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
             if (File.Exists(path)) File.Delete(path);
+            DeleteSessionFromDisk();
         }
 
         public async Task<bool> IsInternetAvailableAsync()

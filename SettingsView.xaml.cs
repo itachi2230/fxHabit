@@ -22,7 +22,6 @@ namespace FxHabit
         public string Phone { get; set; }
         public string Bio { get; set; }
         public DateTime? LastSyncDate { get; set; }
-
         public string ImagePath { get; set; }
     }
 
@@ -31,7 +30,8 @@ namespace FxHabit
         private FxCloudService _cloudService = new FxCloudService();
         private string selectedImagePath = "";
         public bool _isLoggedIn = false;
-
+        private bool _isEditMode = false;
+        private string _tempUpdateImagePath = "";
         // Chemin du fichier local (dans AppData pour être persistant)
         private readonly string _sessionFilePath  ;
 
@@ -43,35 +43,7 @@ namespace FxHabit
             ShowAppPanel();
         }
 
-        #region PERSISTENCE LOCALE (FICHIER)
-
-        private void SaveSessionToDisk(string name, string email, string phone, string bio, string imgPath)
-        {
-            try
-            {
-                var session = new UserSessionData
-                {
-                    IsLoggedIn = true,
-                    FullName = name,
-                    Email = email,
-                    Phone = phone,
-                    Bio = bio,
-                    ImagePath = imgPath
-                };
-
-                string json = JsonSerializer.Serialize(session);
-                File.WriteAllText(_sessionFilePath, json);
-            }
-            catch (Exception ex) { Console.WriteLine("Erreur sauvegarde : " + ex.Message); }
-        }
-
-       
-        private void DeleteSessionFromDisk()
-        {
-            if (File.Exists(_sessionFilePath)) File.Delete(_sessionFilePath);
-        }
-
-        #endregion
+        
 
         private void HideAllPanels()
         {
@@ -147,6 +119,19 @@ namespace FxHabit
             }
         }
         
+        public async void chargerprofile()
+        {
+            var profile = await _cloudService.GetProfileAsync();
+
+            if (profile != null)
+            {
+                _isLoggedIn = true;
+                LoadSessionFromDisk();
+                // --- FIN DU CHARGEMENT (SUCCÈS) ---
+                await ShowNotification("Connecté avec succès !");
+                ShowAccountPanel();
+            }
+        }
         private async void Login_Click(object sender, RoutedEventArgs e)
         {
             if (string.IsNullOrWhiteSpace(TxtIdentifier.Text) || string.IsNullOrWhiteSpace(TxtPassword.Password))
@@ -163,28 +148,7 @@ namespace FxHabit
 
             if (success=="yes")
             {
-                var profile = await _cloudService.GetProfileAsync();
-
-                if (profile != null)
-                {
-                    // TÉLÉCHARGEMENT DE L'IMAGE DE PROFIL DEPUIS LE SERVEUR
-
-                    _isLoggedIn = true;
-
-                    // SAUVEGARDE LOCALE DÉFINITIVE
-                    SaveSessionToDisk(
-                        profile.FullName,
-                        profile.Email,
-                        profile.Phone,
-                        profile.Bio,
-                        profile.ImagePath // On garde le chemin local si téléchargé
-                    );
-
-                    LoadSessionFromDisk();
-                    // --- FIN DU CHARGEMENT (SUCCÈS) ---
-                    await ShowNotification("Connecté avec succès !");
-                    ShowAccountPanel();
-                }
+                chargerprofile();
             }
             else
             {
@@ -211,7 +175,7 @@ namespace FxHabit
                 _isLoggedIn = true;
 
                 // Sauvegarde immédiate dans le fichier local
-                SaveSessionToDisk(RegFullName.Text, RegEmail.Text, RegPhone.Text, RegBio.Text, selectedImagePath);
+                _cloudService.SaveSessionToDisk(RegFullName.Text, RegEmail.Text, RegPhone.Text, RegBio.Text, selectedImagePath);
                 LoadSessionFromDisk(); // Met à jour l'UI avec les infos du fichier
 
                 await ShowNotification("Compte créé !");
@@ -261,17 +225,90 @@ namespace FxHabit
         {
            
             _isLoggedIn = false;
-            DeleteSessionFromDisk(); // Efface le fichier local
-
             // On vide les champs UI
             TxtSessionName.Text = "Utilisateur";
             TxtProfileEmail.Text = "---";
 
             ShowNotification("Session locale effacée");
             ShowAccountPanel();
-            _cloudService.Logout();
+        }
+        // 1. Basculer entre Mode Vue et Mode Édition
+        private void BtnEditToggle_Click(object sender, RoutedEventArgs e)
+        {
+            _isEditMode = !_isEditMode;
+
+            // Visibilité des textes vs inputs
+            TxtSessionName.Visibility = _isEditMode ? Visibility.Collapsed : Visibility.Visible;
+            EditFullName.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
+
+            TxtProfilePhone.Visibility = _isEditMode ? Visibility.Collapsed : Visibility.Visible;
+            EditPhone.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
+
+            TxtProfileBio.Visibility = _isEditMode ? Visibility.Collapsed : Visibility.Visible;
+            EditBio.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
+
+            // Boutons et Image
+            BtnSaveProfile.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
+            EditPhotoOverlay.Visibility = _isEditMode ? Visibility.Visible : Visibility.Collapsed;
+
+            if (_isEditMode)
+            {
+                // Pré-remplir les champs avec les données actuelles
+                EditFullName.Text = TxtSessionName.Text;
+                EditPhone.Text = TxtProfilePhone.Text;
+                EditBio.Text = TxtProfileBio.Text == "Aucune description disponible." ? "" : TxtProfileBio.Text;
+                BtnEditToggle.Content = "ANNULER";
+                _tempUpdateImagePath = ""; // Reset
+            }
+            else
+            {
+                BtnEditToggle.Content = "MODIFIER";
+            }
         }
 
+        // 2. Sélectionner une nouvelle photo durant l'édition
+        private void SelectPhotoUpdate_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (!_isEditMode) return;
+
+            OpenFileDialog op = new OpenFileDialog { Filter = "Images (*.jpg;*.png)|*.jpg;*.png" };
+            if (op.ShowDialog() == true)
+            {
+                _tempUpdateImagePath = op.FileName;
+                ImgUserSession.ImageSource = new BitmapImage(new Uri(_tempUpdateImagePath));
+            }
+        }
+
+        // 3. Sauvegarde finale vers le serveur
+        private async void BtnSaveProfile_Click(object sender, RoutedEventArgs e)
+        {
+            BtnSaveProfile.IsEnabled = false;
+            await ShowNotification("Mise à jour du profil...", false, true);
+
+            var result = await _cloudService.UpdateUserProfileAsync(
+                EditFullName.Text,
+                EditPhone.Text,
+                EditBio.Text,
+                _tempUpdateImagePath
+            );
+
+            if (result.success)
+            {
+                // On quitte le mode édition
+                BtnEditToggle_Click(null, null);
+
+                // On relance TA méthode pour rafraîchir l'UI proprement depuis le serveur
+                chargerprofile();
+
+                await ShowNotification("Profil mis à jour !");
+            }
+            else
+            {
+                await ShowNotification(result.message, true);
+            }
+
+            BtnSaveProfile.IsEnabled = true;
+        }
         private void ShowRegister_Click(object sender, RoutedEventArgs e)
         {
             HideAllPanels();
