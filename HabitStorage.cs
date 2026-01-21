@@ -13,7 +13,6 @@ namespace FxHabit
         private static readonly string FolderName = "Data";
         private static readonly string FileName = "habits.json";
         private static readonly string StatsFolderName = "HabitStats";
-        public static readonly string appid = "FxHabit";
 
         public static string GetFilePath()
         {

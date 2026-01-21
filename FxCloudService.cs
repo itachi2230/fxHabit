@@ -13,25 +13,74 @@ namespace FxHabit.Services
 {
     public class FxCloudService
     {
-        private static readonly HttpClient _httpClient = new HttpClient { BaseAddress = new Uri("http://localhost:8080/") };
+        private static HttpClient _httpClient;
         private const string TokenFileName = "session.bin";
         private readonly string _localProfileCache = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache");
+        private readonly string _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
         public readonly string _sessionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session_v1.json");
-        // Propriétés publiques (inchangées pour ne pas casser Settings)
+
         public string CurrentToken { get; private set; }
         public string RefreshToken { get; private set; }
+        public string AppId { get; private set; }
 
         public FxCloudService()
         {
-            LoadTokens(); // On charge les deux jetons au démarrage
+            InitializeService();
+        }
+
+        #region CONFIGURATION ET INITIALISATION
+
+        private void InitializeService()
+        {
+            string serverUrl = LoadConfiguration();
+
+            if (_httpClient == null)
+            {
+                _httpClient = new HttpClient { BaseAddress = new Uri(serverUrl) };
+                _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            }
+
+            LoadTokens();
             if (!Directory.Exists(_localProfileCache)) Directory.CreateDirectory(_localProfileCache);
         }
 
-        // --- AUTHENTIFICATION ---
+        private string LoadConfiguration()
+        {
+            string defaultUrl = "http://localhost:8080/";
+            AppId = "FX_HABIT_DEFAULT";
+
+            if (File.Exists(_configFilePath))
+            {
+                var lines = File.ReadAllLines(_configFilePath);
+                foreach (var line in lines)
+                {
+                    string cleanLine = line.Trim();
+                    if (cleanLine.StartsWith("server=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string url = cleanLine.Substring(7).Trim();
+                        if (!string.IsNullOrEmpty(url)) defaultUrl = url.EndsWith("/") ? url : url + "/";
+                    }
+                    else if (cleanLine.StartsWith("app_id=", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string id = cleanLine.Substring(7).Trim();
+                        if (!string.IsNullOrEmpty(id)) AppId = id;
+                    }
+                }
+            }
+            else
+            {
+                string configContent = "# CONFIGURATION FX-HABIT\nserver=http://localhost:8080/\napp_id=FX_HABIT_DEFAULT";
+                File.WriteAllText(_configFilePath, configContent);
+            }
+            return defaultUrl;
+        }
+
+        #endregion
+
+        #region AUTHENTIFICATION
 
         public async Task<string> RegisterAsync(string email, string phone, string password, string fullName, string bio, string imagePath)
         {
-            // 1. Vérification préventive de la connectivité
             string status = await GetCloudStatusAsync();
             if (status == "OFFLINE_NO_INTERNET") return "pas d'internet";
             if (status == "OFFLINE_SERVER_DOWN") return "serveur inaccessible";
@@ -45,12 +94,11 @@ namespace FxHabit.Services
                 content.Add(new StringContent(phone ?? ""), "phone");
                 content.Add(new StringContent(bio ?? ""), "bio");
 
-                // Gestion de l'image de profil
                 if (!string.IsNullOrEmpty(imagePath) && File.Exists(imagePath))
                 {
                     var fileBytes = File.ReadAllBytes(imagePath);
                     var fileContent = new ByteArrayContent(fileBytes);
-                    fileContent.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("image/jpeg");
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("image/jpeg");
                     content.Add(fileContent, "image", Path.GetFileName(imagePath));
                 }
 
@@ -58,29 +106,16 @@ namespace FxHabit.Services
 
                 if (response.IsSuccessStatusCode)
                 {
-                    if (email != null) { await LoginAsync(email, password); }
-                    else if (phone != null) { await LoginAsync(phone, password); }
-                    else { }
-                    
+                    await LoginAsync(email ?? phone, password);
                     return "yes";
                 }
-                else if (response.StatusCode == System.Net.HttpStatusCode.Conflict)
-                {
-                    return "email déjà utilisé";
-                }
-                else
-                {
-                    return "erreur serveur";
-                }
+                return response.StatusCode == System.Net.HttpStatusCode.Conflict ? "email déjà utilisé" : "erreur serveur";
             }
-            catch (Exception)
-            {
-                return "erreur inconnue";
-            }
+            catch { return "erreur inconnue"; }
         }
+
         public async Task<string> LoginAsync(string identifier, string password)
         {
-            // 1. Vérification préventive de la connectivité
             string status = await GetCloudStatusAsync();
             if (status == "OFFLINE_NO_INTERNET") return "pas d'internet";
             if (status == "OFFLINE_SERVER_DOWN") return "serveur inaccessible";
@@ -96,40 +131,24 @@ namespace FxHabit.Services
                     using (var doc = JsonDocument.Parse(json))
                     {
                         CurrentToken = doc.RootElement.GetProperty("token").GetString();
-
-                        // Récupération sécurisée du refresh_token
                         if (doc.RootElement.TryGetProperty("refresh_token", out var refresh))
                             RefreshToken = refresh.GetString();
                     }
-
                     SaveTokens();
                     return "yes";
                 }
-                else if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized)
-                {
-                    return "identifiants incorrects";
-                }
-                else
-                {
-                    return "erreur serveur";
-                }
+                return response.StatusCode == System.Net.HttpStatusCode.Unauthorized ? "identifiants incorrects" : "erreur serveur";
             }
-            catch (Exception)
-            {
-                return "erreur inconnue";
-            }
+            catch { return "erreur inconnue"; }
         }
-        // --- LOGIQUE REFRESH (INVISIBLE) ---
 
         public async Task<bool> RefreshTokenAsync()
         {
             if (string.IsNullOrEmpty(RefreshToken)) return false;
-
             try
             {
                 var data = new { refresh_token = RefreshToken };
                 var response = await _httpClient.PostAsync("token/refresh", GetJsonContent(data));
-
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
@@ -147,354 +166,188 @@ namespace FxHabit.Services
             return false;
         }
 
-        // Méthode wrapper pour sécuriser les appels existants sans changer leur signature
-        private async Task<HttpResponseMessage> SecureRequestAsync(Func<Task<HttpResponseMessage>> requestFunc)
+        public void Logout()
         {
-            SetAuthHeader();
-            var response = await requestFunc();
-
-            if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(RefreshToken))
-            {
-                if (await RefreshTokenAsync())
-                {
-                    SetAuthHeader();
-                    return await requestFunc();
-                }
-            }
-            return response;
+            CurrentToken = null;
+            RefreshToken = null;
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
+            if (File.Exists(path)) File.Delete(path);
+            DeleteSessionFromDisk();
         }
 
-        // --- PROFIL & MISE À JOUR (Utilisent maintenant le SecureRequest) ---
-        public List<SyncItem> GetAppSyncManifest()
-        {
-            return new List<SyncItem>
-            {
-                new SyncItem { LocalPath = "data/", RemoteRelativePath = "data/", IsDirectory =true }
-            };
-        }
+        #endregion
+
+        #region PROFIL ET SESSION
+
         public async Task<UserSessionData> GetProfileAsync()
         {
             if (string.IsNullOrEmpty(CurrentToken)) return null;
-
             try
             {
                 var response = await SecureRequestAsync(() => _httpClient.GetAsync("api/me"));
                 if (response.IsSuccessStatusCode)
                 {
                     var json = await response.Content.ReadAsStringAsync();
-                    var session= JsonSerializer.Deserialize<UserSessionData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                    session.ImagePath=await DownloadProfileImageAsync(session.ImagePath);
-                    SaveSessionToDisk(session.FullName,session.Email,session.Phone,session.Bio,session.ImagePath);
+                    var session = JsonSerializer.Deserialize<UserSessionData>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    session.ImagePath = await DownloadProfileImageAsync(session.ImagePath);
+                    SaveSessionToDisk(session.FullName, session.Email, session.Phone, session.Bio, session.ImagePath);
                     return session;
-
                 }
             }
             catch { }
             return null;
         }
-        public async Task<List<string>> SyncEverythingAsync(string appId)
-        {
-            var manifest = GetAppSyncManifest();
-            var reports = new List<string>();
-            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-            foreach (var item in manifest)
-            {
-                string fullLocalPath = Path.Combine(baseDir, item.LocalPath);
-
-                if (item.IsDirectory)
-                {
-                    if (Directory.Exists(fullLocalPath))
-                    {
-                        var files = Directory.GetFiles(fullLocalPath, "*.*", SearchOption.AllDirectories);
-
-                        // On s'assure que le chemin du dossier finit par un slash pour Uri
-                        string folderPathWithSlash = fullLocalPath.EndsWith(Path.DirectorySeparatorChar.ToString())
-                            ? fullLocalPath
-                            : fullLocalPath + Path.DirectorySeparatorChar;
-
-                        foreach (var file in files)
-                        {
-                            // Calcul manuel du chemin relatif compatible toutes versions .NET
-                            Uri folderUri = new Uri(folderPathWithSlash);
-                            Uri fileUri = new Uri(file);
-                            string relativeFile = Uri.UnescapeDataString(folderUri.MakeRelativeUri(fileUri).ToString());
-
-                            // On prépare le chemin pour le serveur (toujours des slashs /)
-                            string remotePath = Path.Combine(item.RemoteRelativePath, relativeFile).Replace("\\", "/");
-
-                            string result = await SyncFileAsync(appId, file, remotePath);
-                            reports.Add($"{Path.GetFileName(file)}: {result}");
-                        }
-                    }
-                
-                }
-                else
-                {
-                    // --- GESTION D'UN FICHIER SIMPLE ---
-                    if (File.Exists(fullLocalPath))
-                    {
-                        string result = await SyncFileAsync(appId, fullLocalPath, item.RemoteRelativePath);
-                        reports.Add($"{item.LocalPath}: {result}");
-                    }
-                    else
-                    {
-                        reports.Add($"{item.LocalPath}: introuvable en local");
-                    }
-                }
-            }
-
-            return reports;
-        }
-        // --- GESTION DES FICHIERS ---
-
-        public async Task<string> DownloadProfileImageAsync(string serverFileName)
-        {
-            if (string.IsNullOrEmpty(serverFileName)) return null;
-            string localPath = Path.Combine(_localProfileCache, serverFileName);
-            if (File.Exists(localPath)) return localPath;
-
-            try
-            {
-                var response = await _httpClient.GetAsync($"profiles/{serverFileName}");
-                if (response.IsSuccessStatusCode)
-                {
-                    var bytes = await response.Content.ReadAsByteArrayAsync();
-                    File.WriteAllBytes(localPath, bytes);
-                    return localPath;
-                }
-            }
-            catch { }
-            return null;
-        }
         public async Task<(bool success, string message, string newImagePath)> UpdateUserProfileAsync(string fullName, string phone, string bio, string localImagePath = null)
         {
             try
             {
                 using (var content = new MultipartFormDataContent())
                 {
-                    // Ajout des champs texte
                     content.Add(new StringContent(fullName ?? ""), "fullName");
                     content.Add(new StringContent(phone ?? ""), "phone");
                     content.Add(new StringContent(bio ?? ""), "bio");
 
-                    // Ajout de l'image si un chemin local est fourni
                     if (!string.IsNullOrEmpty(localImagePath) && File.Exists(localImagePath))
                     {
-                        var fileStream = new FileStream(localImagePath, FileMode.Open, FileAccess.Read);
-                        var fileContent = new StreamContent(fileStream);
+                        var fileBytes = File.ReadAllBytes(localImagePath);
+                        var fileContent = new ByteArrayContent(fileBytes);
                         fileContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
                         content.Add(fileContent, "image", Path.GetFileName(localImagePath));
                     }
 
-                    var response = await SecureRequestAsync(() =>
-                        _httpClient.PostAsync("api/user/update", content)
-                    );
-
+                    var response = await SecureRequestAsync(() => _httpClient.PostAsync("api/user/update", content));
                     if (response.IsSuccessStatusCode)
                     {
                         var json = await response.Content.ReadAsStringAsync();
                         using (var doc = JsonDocument.Parse(json))
                         {
-                            string serverImagePath = doc.RootElement.GetProperty("imagePath").GetString();
+                            string serverImg = doc.RootElement.GetProperty("imagePath").GetString();
                             string mail = doc.RootElement.GetProperty("email").GetString();
-                            SaveSessionToDisk(fullName, mail, phone, bio, serverImagePath);
-                            return (true, "Profil mis à jour !", serverImagePath);
+                            SaveSessionToDisk(fullName, mail, phone, bio, serverImg);
+                            return (true, "Profil mis à jour !", serverImg);
                         }
                     }
-
                     return (false, $"Erreur: {response.StatusCode}", null);
                 }
             }
-            catch (Exception ex)
-            {
-                return (false, $"Erreur réseau : {ex.Message}", null);
-            }
+            catch (Exception ex) { return (false, $"Erreur réseau : {ex.Message}", null); }
         }
-        public async Task<List<string>> FullSyncAsync(string appId)
-        {
-            var reports = new List<string>();
-            reports.Add($"--- Début de la synchronisation complète ({DateTime.Now:HH:mm}) ---");
 
+        #endregion
+
+        #region SYNCHRONISATION CLOUD
+
+        public async Task<List<string>> FullSyncAsync()
+        {
+            var reports = new List<string> { $"--- Début synchro ({DateTime.Now:HH:mm}) ---" };
             try
             {
-                // ÉTAPE 1 : Upload des fichiers locaux vers le serveur
-                // On envoie d'abord nos modifs pour ne pas les écraser par un download
-                reports.Add("Vérification des modifications locales...");
-                var uploadReports = await SyncEverythingAsync(appId);
+                reports.Add("Envoi des modifications locales...");
+                var uploadReports = await SyncEverythingAsync();
                 reports.AddRange(uploadReports);
 
-                // ÉTAPE 2 : Download des fichiers du serveur qui nous manquent
-                reports.Add("Vérification des fichiers distants...");
-                var downloadResult = await SyncFromServerAsync(appId);
+                reports.Add("Récupération des fichiers distants...");
+                var downloadResult = await SyncFromServerAsync();
                 reports.Add(downloadResult);
 
-                // ÉTAPE 3 : Mise à jour de la date de dernière synchro locale
                 UpdateLocalLastSync(DateTime.Now);
-
-                reports.Add("--- Synchronisation terminée avec succès ---");
+                reports.Add("--- Synchronisation terminée ---");
             }
-            catch (Exception ex)
-            {
-                reports.Add($"!!! Erreur critique durant la synchro : {ex.Message}");
-            }
-
+            catch (Exception ex) { reports.Add($"!!! Erreur : {ex.Message}"); }
             return reports;
         }
-        public async Task<bool> UploadSyncFileAsync(string localPath, string type)
-        {
-            if (string.IsNullOrEmpty(CurrentToken) || !File.Exists(localPath)) return false;
 
-            var content = new MultipartFormDataContent();
-            var fileContent = new ByteArrayContent(File.ReadAllBytes(localPath));
-            fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/json");
-            content.Add(fileContent, "file", Path.GetFileName(localPath));
-            content.Add(new StringContent(type), "type");
-                    
-            var response = await SecureRequestAsync(() => _httpClient.PostAsync("api/storage/sync", content));
-            return response.IsSuccessStatusCode;
-        }
-        // Helper pour calculer l'empreinte du fichier (Hash)
-        private string GetFileHash(string filePath)
+        public async Task<List<string>> SyncEverythingAsync()
         {
-            using (var md5 = MD5.Create())
+            var reports = new List<string>();
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+
+            foreach (var item in GetAppSyncManifest())
             {
-                using (var stream = File.OpenRead(filePath))
+                string fullPath = Path.Combine(baseDir, item.LocalPath);
+                if (item.IsDirectory && Directory.Exists(fullPath))
                 {
-                    var hash = md5.ComputeHash(stream);
-                    return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
-                }
-            }
-        }
-
-        public async Task<string> SyncFileAsync(string appId, string localFilePath, string remoteRelativePath)
-        {
-            try
-            {
-                // 1. Connexion & Existence locale
-                string status = await GetCloudStatusAsync();
-                if (status == "OFFLINE_NO_INTERNET") return "pas d'internet";
-                if (status == "OFFLINE_SERVER_DOWN") return "serveur inaccessible";
-                if (!File.Exists(localFilePath)) return "fichier local introuvable";
-
-                // 2. Calcul du Hash local
-                string localHash = GetFileHash(localFilePath);
-
-                // --- NOUVEAUTÉ : VÉRIFICATION PRÉALABLE ---
-                var checkContent = new MultipartFormDataContent();
-                checkContent.Add(new StringContent(appId), "app_id");
-                checkContent.Add(new StringContent(remoteRelativePath), "target_path");
-
-                // On appelle la route 'file-info' que nous avons créée dans le controller Symfony
-                var checkResponse = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/file-info", checkContent));
-
-                if (checkResponse.IsSuccessStatusCode)
-                {
-                    var infoJson = await checkResponse.Content.ReadAsStringAsync();
-                    using (var doc = JsonDocument.Parse(infoJson))
+                    foreach (var file in Directory.GetFiles(fullPath, "*.*", SearchOption.AllDirectories))
                     {
-                        if (doc.RootElement.TryGetProperty("hash", out var serverHash))
-                        {
-                            // SI LES HASH SONT IDENTIQUES, ON ARRÊTE TOUT ICI !
-                            if (serverHash.GetString() == localHash)
-                                return "déjà à jour";
-                        }
+                        string relative = file.Replace(fullPath, "").Replace("\\", "/").TrimStart('/');
+                        string remote = Path.Combine(item.RemoteRelativePath, relative).Replace("\\", "/");
+                        string res = await SyncFileAsync(file, remote);
+                        reports.Add($"{Path.GetFileName(file)}: {res}");
                     }
                 }
-
-                // 3. Si on arrive ici, c'est que le fichier est différent ou n'existe pas
-                var uploadContent = new MultipartFormDataContent();
-                uploadContent.Add(new StringContent(appId), "app_id");
-                uploadContent.Add(new StringContent(remoteRelativePath), "target_path");
-                uploadContent.Add(new StringContent(localHash), "file_hash");
-
-                var fileBytes = File.ReadAllBytes(localFilePath);
-                var fileContent = new ByteArrayContent(fileBytes);
-                fileContent.Headers.ContentType = System.Net.Http.Headers.MediaTypeHeaderValue.Parse("application/octet-stream");
-                uploadContent.Add(fileContent, "file", Path.GetFileName(localFilePath));
-
-                // Envoi final
-                var response = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/sync-file", uploadContent));
-
-                if (response.IsSuccessStatusCode) return "success";
-
-                return "erreur serveur (" + response.StatusCode + ")";
+                else if (File.Exists(fullPath))
+                {
+                    string res = await SyncFileAsync(fullPath, item.RemoteRelativePath);
+                    reports.Add($"{item.LocalPath}: {res}");
+                }
             }
-            catch (Exception ex)
-            {
-                return "erreur: " + ex.Message;
-            }
+            return reports;
         }
 
-        // --- RÉCUPÉRATION DEPUIS LE CLOUD ---
-
-        public async Task<string> SyncFromServerAsync(string appId)
+        public async Task<string> SyncFromServerAsync()
         {
             try
             {
-                // 1. Récupérer la liste des fichiers sur le serveur
-                var response = await SecureRequestAsync(() => _httpClient.GetAsync($"api/cloud/list?app_id={appId}"));
-                if (!response.IsSuccessStatusCode) return $"Erreur liste serveur ({response.StatusCode})";
+                var response = await SecureRequestAsync(() => _httpClient.GetAsync($"api/cloud/list?app_id={AppId}"));
+                if (!response.IsSuccessStatusCode) return "Erreur liste serveur";
 
-                var json = await response.Content.ReadAsStringAsync();
-                var manifest = JsonSerializer.Deserialize<CloudManifest>(json);
-
-                int downloadedCount = 0;
+                var manifest = JsonSerializer.Deserialize<CloudManifest>(await response.Content.ReadAsStringAsync());
+                int count = 0;
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
 
-                foreach (var remoteFile in manifest.files)
+                foreach (var remote in manifest.files)
                 {
-                    string localPath = Path.Combine(baseDir, remoteFile.path);
-                    bool shouldDownload = false;
-
-                    if (!File.Exists(localPath))
+                    string local = Path.Combine(baseDir, remote.path);
+                    if (!File.Exists(local) || GetFileHash(local) != remote.hash)
                     {
-                        shouldDownload = true; // Le fichier n'existe pas du tout
-                    }
-                    else
-                    {
-                        // Le fichier existe, on compare les Hashes
-                        string localHash = GetFileHash(localPath);
-                        if (localHash != remoteFile.hash)
-                        {
-                            shouldDownload = true; // Le fichier a été modifié sur le serveur
-                        }
-                    }
-
-                    if (shouldDownload)
-                    {
-                        bool success = await DownloadFileAsync(appId, remoteFile.path, localPath);
-                        if (success) downloadedCount++;
+                        if (await DownloadFileAsync(remote.path, local)) count++;
                     }
                 }
-
-                return $"Synchro terminée : {downloadedCount} fichiers mis à jour.";
+                return $"Synchro : {count} fichiers mis à jour.";
             }
-            catch (Exception ex)
-            {
-                return $"Erreur synchro: {ex.Message}";
-            }
+            catch (Exception ex) { return $"Erreur: {ex.Message}"; }
         }
 
-        private async Task<bool> DownloadFileAsync(string appId, string remotePath, string localPath)
+        private async Task<string> SyncFileAsync(string localPath, string remotePath)
         {
             try
             {
-                // On encode le chemin pour l'URL (gestion des espaces, etc.)
-                string url = $"api/cloud/download?app_id={appId}&target_path={Uri.EscapeDataString(remotePath)}";
+                string hash = GetFileHash(localPath);
+                var checkContent = new MultipartFormDataContent();
+                checkContent.Add(new StringContent(AppId), "app_id");
+                checkContent.Add(new StringContent(remotePath), "target_path");
 
-                var response = await SecureRequestAsync(() => _httpClient.GetAsync(url));
-                if (response.IsSuccessStatusCode)
+                var check = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/file-info", checkContent));
+                if (check.IsSuccessStatusCode)
                 {
-                    // Créer les dossiers parents si nécessaire
-                    string directory = Path.GetDirectoryName(localPath);
-                    if (!Directory.Exists(directory)) Directory.CreateDirectory(directory);
+                    using (var doc = JsonDocument.Parse(await check.Content.ReadAsStringAsync()))
+                        if (doc.RootElement.TryGetProperty("hash", out var sHash) && sHash.GetString() == hash) return "à jour";
+                }
 
-                    // Écriture du flux binaire directement sur le disque (efficace pour la RAM)
-                    using (var fs = new FileStream(localPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                    {
-                        await response.Content.CopyToAsync(fs);
-                    }
+                var upload = new MultipartFormDataContent();
+                upload.Add(new StringContent(AppId), "app_id");
+                upload.Add(new StringContent(remotePath), "target_path");
+                upload.Add(new StringContent(hash), "file_hash");
+                upload.Add(new ByteArrayContent(File.ReadAllBytes(localPath)), "file", Path.GetFileName(localPath));
+
+                var res = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/sync-file", upload));
+                return res.IsSuccessStatusCode ? "success" : "erreur serveur";
+            }
+            catch (Exception ex) { return "erreur: " + ex.Message; }
+        }
+
+        private async Task<bool> DownloadFileAsync(string remotePath, string localPath)
+        {
+            try
+            {
+                string url = $"api/cloud/download?app_id={AppId}&target_path={Uri.EscapeDataString(remotePath)}";
+                var res = await SecureRequestAsync(() => _httpClient.GetAsync(url));
+                if (res.IsSuccessStatusCode)
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(localPath));
+                    using (var fs = new FileStream(localPath, FileMode.Create))
+                        await res.Content.CopyToAsync(fs);
                     return true;
                 }
             }
@@ -502,51 +355,111 @@ namespace FxHabit.Services
             return false;
         }
 
-        // --- UTILITAIRES & ÉTAT ---
-        #region PERSISTENCE LOCALE (FICHIER)
+        public async Task<string> DownloadProfileImageAsync(string fileName)
+        {
+            if (string.IsNullOrEmpty(fileName)) return null;
+            string local = Path.Combine(_localProfileCache, fileName);
+            if (File.Exists(local)) return local;
+
+            try
+            {
+                var res = await _httpClient.GetAsync($"profiles/{fileName}");
+                if (res.IsSuccessStatusCode)
+                {
+                    File.WriteAllBytes(local, await res.Content.ReadAsByteArrayAsync());
+                    return local;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        #endregion
+
+        #region UTILITAIRES ET RÉSEAU
+
+        private async Task<HttpResponseMessage> SecureRequestAsync(Func<Task<HttpResponseMessage>> requestFunc)
+        {
+            SetAuthHeader();
+            var res = await requestFunc();
+            if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(RefreshToken))
+            {
+                if (await RefreshTokenAsync())
+                {
+                    SetAuthHeader();
+                    return await requestFunc();
+                }
+            }
+            return res;
+        }
+
+        private void SetAuthHeader()
+        {
+            _httpClient.DefaultRequestHeaders.Authorization = !string.IsNullOrEmpty(CurrentToken)
+                ? new AuthenticationHeaderValue("Bearer", CurrentToken) : null;
+        }
+
+        public async Task<string> GetCloudStatusAsync()
+        {
+            if (!await IsInternetAvailableAsync()) return "OFFLINE_NO_INTERNET";
+            if (!await IsServerReachableAsync()) return "OFFLINE_SERVER_DOWN";
+            return string.IsNullOrEmpty(CurrentToken) ? "ONLINE_NO_ACCOUNT" : "READY";
+        }
+
+        public async Task<bool> IsInternetAvailableAsync()
+        {
+            try { using (var p = new Ping()) return (await p.SendPingAsync("8.8.8.8", 2000)).Status == IPStatus.Success; }
+            catch { return false; }
+        }
+
+        public async Task<bool> IsServerReachableAsync()
+        {
+            try { var res = await _httpClient.GetAsync("home"); return true; }
+            catch { return false; }
+        }
+
+        private string GetFileHash(string path)
+        {
+            using (var md5 = MD5.Create())
+            using (var s = File.OpenRead(path))
+                return BitConverter.ToString(md5.ComputeHash(s)).Replace("-", "").ToLowerInvariant();
+        }
+
+        private StringContent GetJsonContent(object data)
+            => new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
+
+        public List<SyncItem> GetAppSyncManifest()
+            => new List<SyncItem> { new SyncItem { LocalPath = "data/", RemoteRelativePath = "data/", IsDirectory = true } };
+
+        #endregion
+
+        #region GESTION DISQUE LOCALE
+
         public void SaveSessionToDisk(string name, string email, string phone, string bio, string imgPath)
         {
             try
             {
-                var session = new UserSessionData
-                {
-                    IsLoggedIn = true,
-                    FullName = name,
-                    Email = email,
-                    Phone = phone,
-                    Bio = bio,
-                    ImagePath = imgPath
-                };
-
-                string json = JsonSerializer.Serialize(session);
-                File.WriteAllText(_sessionFilePath, json);
+                var data = new UserSessionData { IsLoggedIn = true, FullName = name, Email = email, Phone = phone, Bio = bio, ImagePath = imgPath };
+                File.WriteAllText(_sessionFilePath, JsonSerializer.Serialize(data));
             }
-            catch (Exception ex) {  }
+            catch { }
         }
 
-
-        public void DeleteSessionFromDisk()
+        public void UpdateLocalLastSync(DateTime date)
         {
-            if (File.Exists(_sessionFilePath)) File.Delete(_sessionFilePath);
-        }
-
-        #endregion
-        private void SetAuthHeader()
-        {
-            LoadTokens();
-            _httpClient.DefaultRequestHeaders.Authorization = null; // Clean avant ajout
-            if (!string.IsNullOrEmpty(CurrentToken))
+            if (!File.Exists(_sessionFilePath)) return;
+            try
             {
-                _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", CurrentToken);
+                var user = JsonSerializer.Deserialize<UserSessionData>(File.ReadAllText(_sessionFilePath));
+                user.LastSyncDate = date;
+                File.WriteAllText(_sessionFilePath, JsonSerializer.Serialize(user));
             }
+            catch { }
         }
 
-        private void SaveTokens()
-        {
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
-            // On sauve les deux tokens sur deux lignes
-            File.WriteAllLines(path, new[] { CurrentToken ?? "", RefreshToken ?? "" });
-        }
+        public void DeleteSessionFromDisk() { if (File.Exists(_sessionFilePath)) File.Delete(_sessionFilePath); }
+
+        private void SaveTokens() { File.WriteAllLines(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName), new[] { CurrentToken ?? "", RefreshToken ?? "" }); }
 
         private void LoadTokens()
         {
@@ -559,86 +472,12 @@ namespace FxHabit.Services
             }
         }
 
-        public void Logout()
-        {
-            CurrentToken = null;
-            RefreshToken = null;
-            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, TokenFileName);
-            if (File.Exists(path)) File.Delete(path);
-            DeleteSessionFromDisk();
-        }
-
-        public async Task<bool> IsInternetAvailableAsync()
-        {
-            try
-            {
-                using (var ping = new Ping())
-                {
-                    var reply = await ping.SendPingAsync("8.8.8.8", 2000);
-                    return reply.Status == IPStatus.Success;
-                }
-            }
-            catch { return false; }
-        }
-
-        public async Task<bool> IsServerReachableAsync()
-        {
-            try
-            {
-                using (var cts = new System.Threading.CancellationTokenSource(3000))
-                {
-                    var response = await _httpClient.GetAsync( "/home");
-                    return true;
-                }
-            }
-            catch { return false; }
-        }
-
-        public bool IsUserAuthenticated() => !string.IsNullOrEmpty(CurrentToken);
-
-        public async Task<string> GetCloudStatusAsync()
-        {
-            if (!await IsInternetAvailableAsync()) return "OFFLINE_NO_INTERNET";
-            if (!await IsServerReachableAsync()) return "OFFLINE_SERVER_DOWN";
-            if (!IsUserAuthenticated()) return "ONLINE_NO_ACCOUNT";
-            return "READY";
-        }
-        public void UpdateLocalLastSync(DateTime date)
-        {
-            try
-            {
-                if (File.Exists(_sessionFilePath))
-                {
-                    var json = File.ReadAllText(_sessionFilePath);
-                    var user = JsonSerializer.Deserialize<UserSessionData>(json);
-                    user.LastSyncDate = date;
-
-                    // On réécrit le fichier avec la date mise à jour
-                    File.WriteAllText(_sessionFilePath, JsonSerializer.Serialize(user));
-                }
-            }
-            catch { /* Gestion d'erreur silencieuse pour le cache */ }
-        }
-        private StringContent GetJsonContent(object data)
-            => new StringContent(JsonSerializer.Serialize(data), Encoding.UTF8, "application/json");
-    }
-    public class SyncItem
-    {
-        public string LocalPath { get; set; }        // Chemin sur le PC
-        public string RemoteRelativePath { get; set; } // Chemin dans le cloud
-        public bool IsDirectory { get; set; }        // Est-ce un dossier complet ?
-    }
-    public class CloudManifest
-    {
-        public string app_id { get; set; }
-        public List<CloudFileInfo> files { get; set; }
+        #endregion
     }
 
-    public class CloudFileInfo
-    {
-        public string path { get; set; }
-        public string hash { get; set; }
-        public long size { get; set; }
-        public long last_modified { get; set; }
-    }
+    #region CLASSES DE DONNÉES
+    public class SyncItem { public string LocalPath { get; set; } public string RemoteRelativePath { get; set; } public bool IsDirectory { get; set; } }
+    public class CloudManifest { public string app_id { get; set; } public List<CloudFileInfo> files { get; set; } }
+    public class CloudFileInfo { public string path { get; set; } public string hash { get; set; } public long size { get; set; } public long last_modified { get; set; } }
+    #endregion
 }

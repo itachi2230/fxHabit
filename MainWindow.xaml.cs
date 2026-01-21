@@ -137,7 +137,6 @@ namespace FxHabit
             CloudConnectedPanel.Visibility = Visibility.Collapsed;
             CloudDisconnectedPanel.Visibility = Visibility.Visible;
         }
-
         // Cette méthode met à jour l'UI avec les données qu'on lui donne (locales ou serveurs)
         private void ApplyUserInterface(UserSessionData data)
         {
@@ -195,12 +194,12 @@ namespace FxHabit
             try
             {
                 // 2. Lancer la synchronisation
-                List<string> results = await _cloudService.FullSyncAsync(HabitStorage.appid);
+                List<string> results = await _cloudService.FullSyncAsync();
 
                 // 3. Analyse intelligente des résultats
                 // On vérifie si une ligne contient "success" ou "mis à jour"
                 int changeCount = results.Count(line => line.Contains("success") || line.Contains("mis à jour") && !line.Contains("0"));
-                bool hasCriticalError = results.Any(line => line.Contains("!!! Erreur") || line.Contains("inaccessible"));
+                bool hasCriticalError = results.Any(line => line.Contains("Erreur") || line.Contains("inaccessible"));
 
                 // Construction du message de notification
                 string messageFinal;
@@ -225,7 +224,7 @@ namespace FxHabit
                 }
 
                 // 4. Afficher la notification (0.5 pour la durée ou l'opacité selon ton helper)
-                await ShowNotification(messageFinal, isError, true, 0.5);
+                await ShowNotification(messageFinal, isError, false, 0.5);
             }
             catch (Exception ex)
             {
