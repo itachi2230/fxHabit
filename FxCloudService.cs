@@ -18,7 +18,7 @@ namespace FxHabit.Services
         private readonly string _localProfileCache = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "cache");
         private readonly string _configFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "config.txt");
         public readonly string _sessionFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "session_v1.json");
-
+        private static readonly object _logLock = new object();
         public string CurrentToken { get; private set; }
         public string RefreshToken { get; private set; }
         public string AppId { get; private set; }
@@ -46,7 +46,7 @@ namespace FxHabit.Services
 
         private string LoadConfiguration()
         {
-            string defaultUrl = "http://localhost:8080/";
+            string defaultUrl = "https://fxdataedge.com/api/public/index.php/";
             AppId = "FX_HABIT_DEFAULT";
 
             if (File.Exists(_configFilePath))
@@ -69,7 +69,7 @@ namespace FxHabit.Services
             }
             else
             {
-                string configContent = "# CONFIGURATION FX-HABIT\nserver=http://localhost:8080/\napp_id=FX_HABIT_DEFAULT";
+                string configContent = "# CONFIGURATION FX-HABIT\nserver=https://fxdataedge.com/api/public/index.php/\napp_id=FX_HABIT_DEFAULT";
                 File.WriteAllText(_configFilePath, configContent);
             }
             return defaultUrl;
@@ -240,24 +240,33 @@ namespace FxHabit.Services
 
         public async Task<List<string>> FullSyncAsync()
         {
-            var reports = new List<string> { $"--- Début synchro ({DateTime.Now:HH:mm}) ---" };
+            var reports = new List<string>();
+            Log("=== Démarrage FullSync ===");
+
             try
             {
-                reports.Add("Envoi des modifications locales...");
                 var uploadReports = await SyncEverythingAsync();
-                reports.AddRange(uploadReports);
+                foreach (var r in uploadReports)
+                {
+                    reports.Add(r);
+                    Log($"Upload report: {r}");
+                }
 
-                reports.Add("Récupération des fichiers distants...");
                 var downloadResult = await SyncFromServerAsync();
                 reports.Add(downloadResult);
+                Log($"Download report: {downloadResult}");
 
                 UpdateLocalLastSync(DateTime.Now);
-                reports.Add("--- Synchronisation terminée ---");
             }
-            catch (Exception ex) { reports.Add($"!!! Erreur : {ex.Message}"); }
+            catch (Exception ex)
+            {
+                Log($"CRITICAL SYNC ERROR: {ex.Message}");
+                reports.Add("Erreur critique, voir log.txt");
+            }
+
+            Log("=== Fin FullSync ===");
             return reports;
         }
-
         public async Task<List<string>> SyncEverythingAsync()
         {
             var reports = new List<string>();
@@ -314,29 +323,42 @@ namespace FxHabit.Services
             try
             {
                 string hash = GetFileHash(localPath);
-                var checkContent = new MultipartFormDataContent();
-                checkContent.Add(new StringContent(AppId), "app_id");
-                checkContent.Add(new StringContent(remotePath), "target_path");
 
-                var check = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/file-info", checkContent));
-                if (check.IsSuccessStatusCode)
+                // 1. Check file info
+                var checkRes = await SecureRequestAsync(() => {
+                    var content = new MultipartFormDataContent();
+                    content.Add(new StringContent(AppId), "app_id");
+                    content.Add(new StringContent(remotePath), "target_path");
+                    return _httpClient.PostAsync("api/cloud/file-info", content);
+                });
+
+                if (checkRes.IsSuccessStatusCode)
                 {
-                    using (var doc = JsonDocument.Parse(await check.Content.ReadAsStringAsync()))
-                        if (doc.RootElement.TryGetProperty("hash", out var sHash) && sHash.GetString() == hash) return "à jour";
+                    var json = await checkRes.Content.ReadAsStringAsync();
+                    using (var doc = JsonDocument.Parse(json))
+                        if (doc.RootElement.TryGetProperty("hash", out var sH) && sH.GetString() == hash) return "à jour";
                 }
 
-                var upload = new MultipartFormDataContent();
-                upload.Add(new StringContent(AppId), "app_id");
-                upload.Add(new StringContent(remotePath), "target_path");
-                upload.Add(new StringContent(hash), "file_hash");
-                upload.Add(new ByteArrayContent(File.ReadAllBytes(localPath)), "file", Path.GetFileName(localPath));
+                // 2. Upload file
+                var uploadRes = await SecureRequestAsync(() => {
+                    var content = new MultipartFormDataContent();
+                    content.Add(new StringContent(AppId), "app_id");
+                    content.Add(new StringContent(remotePath), "target_path");
+                    content.Add(new StringContent(hash), "file_hash");
+                    var fileContent = new ByteArrayContent(File.ReadAllBytes(localPath));
+                    fileContent.Headers.ContentType = MediaTypeHeaderValue.Parse("application/octet-stream");
+                    content.Add(fileContent, "file", Path.GetFileName(localPath));
+                    return _httpClient.PostAsync("api/cloud/sync-file", content);
+                });
 
-                var res = await SecureRequestAsync(() => _httpClient.PostAsync("api/cloud/sync-file", upload));
-                return res.IsSuccessStatusCode ? "success" : "erreur serveur";
+                return uploadRes.IsSuccessStatusCode ? "success" : $"erreur {uploadRes.StatusCode}";
             }
-            catch (Exception ex) { return "erreur: " + ex.Message; }
+            catch (Exception ex)
+            {
+                Log($"Erreur SyncFile: {ex.Message}");
+                return "erreur: " + ex.Message;
+            }
         }
-
         private async Task<bool> DownloadFileAsync(string remotePath, string localPath)
         {
             try
@@ -382,17 +404,55 @@ namespace FxHabit.Services
         {
             SetAuthHeader();
             var res = await requestFunc();
+
             if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized && !string.IsNullOrEmpty(RefreshToken))
             {
-                if (await RefreshTokenAsync())
+                Log("Token expiré, tentative de refresh...");
+
+                // IMPORTANT: On attend la fin du refresh
+                bool refreshed = await RefreshTokenAsync();
+
+                if (refreshed)
                 {
+                    Log("Refresh réussi, nouvelle tentative de la requête...");
                     SetAuthHeader();
+
+                    // On ré-exécute la requête originale. 
+                    // ATTENTION: Si c'est un POST avec du contenu, 
+                    // il faut que le 'requestFunc' recrée un nouveau contenu.
                     return await requestFunc();
                 }
+                else
+                {
+                    Log("Échec critique du refresh token. L'utilisateur doit se reconnecter.");
+                    Logout(); // On vide les tokens pour éviter de boucler au prochain démarrage
+                }
             }
+
+            if (!res.IsSuccessStatusCode)
+            {
+                Log($"Requête échouée: {res.RequestMessage.RequestUri} | Status: {res.StatusCode}");
+            }
+
             return res;
         }
+        public static void Log(string message)
+        {
+            try
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "log.txt");
+                string logLine = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {message}{Environment.NewLine}";
 
+                lock (_logLock)
+                {
+                    File.AppendAllText(logPath, logLine);
+                }
+            }
+            catch
+            {
+                // On ne lève pas d'exception pour un log pour ne pas bloquer le logiciel
+            }
+        }
         private void SetAuthHeader()
         {
             _httpClient.DefaultRequestHeaders.Authorization = !string.IsNullOrEmpty(CurrentToken)
@@ -479,5 +539,6 @@ namespace FxHabit.Services
     public class SyncItem { public string LocalPath { get; set; } public string RemoteRelativePath { get; set; } public bool IsDirectory { get; set; } }
     public class CloudManifest { public string app_id { get; set; } public List<CloudFileInfo> files { get; set; } }
     public class CloudFileInfo { public string path { get; set; } public string hash { get; set; } public long size { get; set; } public long last_modified { get; set; } }
+    public class UserSession{ public string FullName { get; set; }public string Email { get; set; }public string Phone { get; set; }public string Bio { get; set; } public string LocalImagePath { get; set; } public DateTime? LastSyncDate { get; set; } }
     #endregion
 }

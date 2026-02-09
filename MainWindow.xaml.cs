@@ -195,7 +195,7 @@ namespace FxHabit
             {
                 // 2. Lancer la synchronisation
                 List<string> results = await _cloudService.FullSyncAsync();
-
+                FxCloudService.Log(String.Join("\n", results));
                 // 3. Analyse intelligente des résultats
                 // On vérifie si une ligne contient "success" ou "mis à jour"
                 int changeCount = results.Count(line => line.Contains("success") || line.Contains("mis à jour") && !line.Contains("0"));

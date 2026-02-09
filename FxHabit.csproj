@@ -116,7 +116,6 @@
     <Compile Include="SettingsView.xaml.cs">
       <DependentUpon>SettingsView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="UserSession.cs" />
     <Page Include="AddHabitWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
